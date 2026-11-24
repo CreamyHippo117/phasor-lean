@@ -1,0 +1,3066 @@
+{
+ "flat": {
+  "0": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.289,
+       0.312,
+       0.711,
+       0.688
+      ],
+      "px": [
+       555.0,
+       337.5,
+       1365.0,
+       742.5
+      ]
+     },
+     "center": {
+      "norm": [
+       0.5,
+       0.5
+      ],
+      "px": [
+       960.0,
+       540.0
+      ]
+     },
+     "depth": 100.1,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         540.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         960.0,
+         675.0
+        ],
+        [
+         960.0,
+         405.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.099,
+       0.103,
+       0.268,
+       0.272
+      ],
+      "px": [
+       190.5,
+       111.4,
+       514.5,
+       293.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.184,
+       0.188
+      ],
+      "px": [
+       352.5,
+       202.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "center": {
+       "px": [
+        [
+         352.5,
+         202.5
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-left",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": true,
+       "other": "path",
+       "overlaps": false
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.482,
+       0.344,
+       0.518,
+       0.406
+      ],
+      "px": [
+       926.2,
+       371.2,
+       993.8,
+       438.8
+      ]
+     },
+     "center": {
+      "norm": [
+       0.5,
+       0.375
+      ],
+      "px": [
+       960.0,
+       405.0
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         405.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.288,
+       0.248,
+       0.585,
+       0.627
+      ],
+      "px": [
+       552.8,
+       267.8,
+       1124.2,
+       677.2
+      ]
+     },
+     "center": {
+      "norm": [
+       0.437,
+       0.438
+      ],
+      "px": [
+       838.5,
+       472.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ],
+        [
+         960.0,
+         270.0
+        ],
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": null,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.523,
+       0.304,
+       0.562,
+       0.346
+      ],
+      "px": [
+       1003.8,
+       328.3,
+       1078.2,
+       373.7
+      ]
+     },
+     "center": {
+      "norm": [
+       0.542,
+       0.325
+      ],
+      "px": [
+       1041.0,
+       351.0
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 0.0
+  },
+  "1": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.289,
+       0.312,
+       0.711,
+       0.688
+      ],
+      "px": [
+       555.0,
+       337.5,
+       1365.0,
+       742.5
+      ]
+     },
+     "center": {
+      "norm": [
+       0.5,
+       0.5
+      ],
+      "px": [
+       960.0,
+       540.0
+      ]
+     },
+     "depth": 100.1,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         540.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         960.0,
+         675.0
+        ],
+        [
+         960.0,
+         405.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.099,
+       0.103,
+       0.268,
+       0.272
+      ],
+      "px": [
+       190.5,
+       111.4,
+       514.5,
+       293.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.184,
+       0.188
+      ],
+      "px": [
+       352.5,
+       202.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "center": {
+       "px": [
+        [
+         352.5,
+         202.5
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-left",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": true,
+       "other": "path",
+       "overlaps": false
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.518,
+       0.469,
+       0.553,
+       0.531
+      ],
+      "px": [
+       993.8,
+       506.2,
+       1061.2,
+       573.8
+      ]
+     },
+     "center": {
+      "norm": [
+       0.535,
+       0.5
+      ],
+      "px": [
+       1027.5,
+       540.0
+      ]
+     },
+     "depth": 99.75,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1027.5,
+         540.0
+        ]
+       ],
+       "world": [
+        [
+         0.5,
+         0.0,
+         0.25
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       0.5,
+       0.0,
+       0.25
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.288,
+       0.248,
+       0.585,
+       0.627
+      ],
+      "px": [
+       552.8,
+       267.8,
+       1124.2,
+       677.2
+      ]
+     },
+     "center": {
+      "norm": [
+       0.437,
+       0.438
+      ],
+      "px": [
+       838.5,
+       472.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ],
+        [
+         960.0,
+         270.0
+        ],
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.523,
+       0.304,
+       0.562,
+       0.346
+      ],
+      "px": [
+       1003.8,
+       328.3,
+       1078.2,
+       373.7
+      ]
+     },
+     "center": {
+      "norm": [
+       0.542,
+       0.325
+      ],
+      "px": [
+       1041.0,
+       351.0
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 1.0
+  },
+  "2": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.289,
+       0.312,
+       0.711,
+       0.688
+      ],
+      "px": [
+       555.0,
+       337.5,
+       1365.0,
+       742.5
+      ]
+     },
+     "center": {
+      "norm": [
+       0.5,
+       0.5
+      ],
+      "px": [
+       960.0,
+       540.0
+      ]
+     },
+     "depth": 100.1,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         540.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         960.0,
+         675.0
+        ],
+        [
+         960.0,
+         405.0
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.099,
+       0.103,
+       0.268,
+       0.272
+      ],
+      "px": [
+       190.5,
+       111.4,
+       514.5,
+       293.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.184,
+       0.188
+      ],
+      "px": [
+       352.5,
+       202.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "center": {
+       "px": [
+        [
+         352.5,
+         202.5
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-left",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": true,
+       "other": "path",
+       "overlaps": false
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.553,
+       0.594,
+       0.588,
+       0.656
+      ],
+      "px": [
+       1061.2,
+       641.2,
+       1128.8,
+       708.8
+      ]
+     },
+     "center": {
+      "norm": [
+       0.57,
+       0.625
+      ],
+      "px": [
+       1095.0,
+       675.0
+      ]
+     },
+     "depth": 99.5,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1095.0,
+         675.0
+        ]
+       ],
+       "world": [
+        [
+         1.0,
+         -1.0,
+         0.5
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       1.0,
+       -1.0,
+       0.5
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.288,
+       0.248,
+       0.585,
+       0.627
+      ],
+      "px": [
+       552.8,
+       267.8,
+       1124.2,
+       677.2
+      ]
+     },
+     "center": {
+      "norm": [
+       0.437,
+       0.438
+      ],
+      "px": [
+       838.5,
+       472.5
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ],
+        [
+         960.0,
+         270.0
+        ],
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         1122.0,
+         432.0
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         555.0,
+         675.0
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.523,
+       0.304,
+       0.562,
+       0.346
+      ],
+      "px": [
+       1003.8,
+       328.3,
+       1078.2,
+       373.7
+      ]
+     },
+     "center": {
+      "norm": [
+       0.542,
+       0.325
+      ],
+      "px": [
+       1041.0,
+       351.0
+      ]
+     },
+     "depth": 100.0,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1041.0,
+         351.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "upper-center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": null,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 2.0
+  }
+ },
+ "orbit": {
+  "0": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.259,
+       0.361,
+       0.682,
+       0.765
+      ],
+      "px": [
+       497.6,
+       389.6,
+       1309.5,
+       826.3
+      ]
+     },
+     "center": {
+      "norm": [
+       0.471,
+       0.563
+      ],
+      "px": [
+       903.5,
+       607.9
+      ]
+     },
+     "depth": 12.042,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         552.9
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         841.3,
+         523.5
+        ],
+        [
+         1088.0,
+         584.6
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": true,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.709,
+       0.328,
+       0.832,
+       0.435
+      ],
+      "px": [
+       1362.0,
+       353.9,
+       1597.9,
+       470.1
+      ]
+     },
+     "center": {
+      "norm": [
+       0.771,
+       0.381
+      ],
+      "px": [
+       1479.9,
+       412.0
+      ]
+     },
+     "depth": 14.399,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1485.1,
+         406.9
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "middle-right",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.546,
+       0.487,
+       0.588,
+       0.572
+      ],
+      "px": [
+       1047.8,
+       525.6,
+       1129.7,
+       618.1
+      ]
+     },
+     "center": {
+      "norm": [
+       0.567,
+       0.529
+      ],
+      "px": [
+       1088.7,
+       571.8
+      ]
+     },
+     "depth": 11.547,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1088.5,
+         571.3
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.384,
+       0.357,
+       0.716,
+       0.639
+      ],
+      "px": [
+       737.8,
+       385.5,
+       1374.9,
+       690.3
+      ]
+     },
+     "center": {
+      "norm": [
+       0.55,
+       0.498
+      ],
+      "px": [
+       1056.4,
+       537.9
+      ]
+     },
+     "depth": 12.48,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         1033.3,
+         388.6
+        ],
+        [
+         1227.4,
+         605.2
+        ],
+        [
+         974.9,
+         637.4
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         974.9,
+         637.4
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         1033.3,
+         388.6
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.551,
+       0.541,
+       0.599,
+       0.611
+      ],
+      "px": [
+       1057.7,
+       584.0,
+       1149.4,
+       659.4
+      ]
+     },
+     "center": {
+      "norm": [
+       0.575,
+       0.576
+      ],
+      "px": [
+       1103.6,
+       621.7
+      ]
+     },
+     "depth": 10.895,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1103.4,
+         621.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1103.4,
+         621.0
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 0.0
+  },
+  "1": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.258,
+       0.361,
+       0.684,
+       0.765
+      ],
+      "px": [
+       495.1,
+       389.7,
+       1313.5,
+       825.9
+      ]
+     },
+     "center": {
+      "norm": [
+       0.471,
+       0.563
+      ],
+      "px": [
+       904.3,
+       607.8
+      ]
+     },
+     "depth": 12.042,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         552.9
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         842.3,
+         522.8
+        ],
+        [
+         1087.1,
+         585.4
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": true,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": true,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.712,
+       0.33,
+       0.836,
+       0.438
+      ],
+      "px": [
+       1366.4,
+       356.0,
+       1605.9,
+       473.1
+      ]
+     },
+     "center": {
+      "norm": [
+       0.774,
+       0.384
+      ],
+      "px": [
+       1486.2,
+       414.6
+      ]
+     },
+     "depth": 14.345,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1491.4,
+         409.5
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "middle-right",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.459,
+       0.452,
+       0.501,
+       0.537
+      ],
+      "px": [
+       880.8,
+       487.7,
+       962.2,
+       579.9
+      ]
+     },
+     "center": {
+      "norm": [
+       0.48,
+       0.494
+      ],
+      "px": [
+       921.5,
+       533.8
+      ]
+     },
+     "depth": 11.505,
+     "features": {
+      "center": {
+       "px": [
+        [
+         921.9,
+         533.3
+        ]
+       ],
+       "world": [
+        [
+         0.5,
+         0.0,
+         0.25
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": true,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       0.5,
+       0.0,
+       0.25
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.384,
+       0.357,
+       0.718,
+       0.64
+      ],
+      "px": [
+       737.1,
+       385.9,
+       1378.9,
+       691.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.551,
+       0.499
+      ],
+      "px": [
+       1058.0,
+       538.7
+      ]
+     },
+     "depth": 12.469,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         1038.2,
+         388.9
+        ],
+        [
+         1225.8,
+         606.9
+        ],
+        [
+         971.7,
+         637.5
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         971.7,
+         637.5
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         1038.2,
+         388.9
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.55,
+       0.541,
+       0.597,
+       0.612
+      ],
+      "px": [
+       1055.1,
+       584.6,
+       1147.1,
+       660.5
+      ]
+     },
+     "center": {
+      "norm": [
+       0.573,
+       0.576
+      ],
+      "px": [
+       1101.1,
+       622.6
+      ]
+     },
+     "depth": 10.884,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1101.0,
+         621.9
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1101.0,
+         621.9
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 1.0
+  },
+  "2": {
+   "frame": {
+    "height": 1080,
+    "width": 1920
+   },
+   "objects": [
+    {
+     "bbox": {
+      "norm": [
+       0.257,
+       0.361,
+       0.686,
+       0.764
+      ],
+      "px": [
+       492.8,
+       389.8,
+       1317.1,
+       825.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.471,
+       0.563
+      ],
+      "px": [
+       905.0,
+       607.7
+      ]
+     },
+     "depth": 12.042,
+     "features": {
+      "center": {
+       "px": [
+        [
+         960.0,
+         552.9
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         0.0,
+         -0.1
+        ]
+       ]
+      },
+      "poles": {
+       "px": [
+        [
+         843.3,
+         522.2
+        ],
+        [
+         1086.2,
+         586.1
+        ]
+       ],
+       "world": [
+        [
+         0.0,
+         -1.0,
+         -0.1
+        ],
+        [
+         0.0,
+         1.0,
+         -0.1
+        ]
+       ]
+      },
+      "zeros": {
+       "px": [],
+       "world": []
+      }
+     },
+     "hidden_by": null,
+     "id": "plane",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": true
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": true,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "a": [
+       0.0,
+       0.0
+      ],
+      "backdrop": true,
+      "function": "1/(z**2 + 1)",
+      "kind": "domain_coloring",
+      "latex": "\\frac{1}{z^{2} + 1}",
+      "poles": [
+       [
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        1.0
+       ]
+      ],
+      "zeros": []
+     },
+     "style": {
+      "colormap": "phase",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "domain_coloring",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.714,
+       0.332,
+       0.84,
+       0.441
+      ],
+      "px": [
+       1370.5,
+       358.1,
+       1613.4,
+       475.9
+      ]
+     },
+     "center": {
+      "norm": [
+       0.777,
+       0.386
+      ],
+      "px": [
+       1492.0,
+       417.0
+      ]
+     },
+     "depth": 14.294,
+     "features": {
+      "center": {
+       "px": [
+        [
+         1497.1,
+         411.9
+        ]
+       ],
+       "world": [
+        [
+         -4.5,
+         2.5,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "set",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "middle-right",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": true,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "backdrop": true,
+      "kind": "fractal",
+      "max_iter": 256,
+      "set": "mandelbrot"
+     },
+     "style": {
+      "colormap": "sequential",
+      "glow": "none"
+     },
+     "tags": [],
+     "type": "fractal",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.371,
+       0.415,
+       0.415,
+       0.5
+      ],
+      "px": [
+       712.2,
+       447.9,
+       797.0,
+       539.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.393,
+       0.457
+      ],
+      "px": [
+       754.6,
+       493.8
+      ]
+     },
+     "depth": 11.489,
+     "features": {
+      "center": {
+       "px": [
+        [
+         755.0,
+         493.2
+        ]
+       ],
+       "world": [
+        [
+         1.0,
+         -1.0,
+         0.5
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": true,
+       "in_front_of": true,
+       "left_of": true,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "point",
+      "position": [
+       1.0,
+       -1.0,
+       0.5
+      ],
+      "radius": 0.25
+     },
+     "style": {
+      "color": "primary",
+      "glow": "none"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "dot",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.384,
+       0.358,
+       0.72,
+       0.641
+      ],
+      "px": [
+       736.5,
+       386.2,
+       1382.6,
+       692.8
+      ]
+     },
+     "center": {
+      "norm": [
+       0.552,
+       0.5
+      ],
+      "px": [
+       1059.5,
+       539.5
+      ]
+     },
+     "depth": 12.459,
+     "features": {
+      "curve": {
+       "px": [
+        [
+         1042.8,
+         389.3
+        ],
+        [
+         1224.2,
+         608.4
+        ],
+        [
+         968.8,
+         637.5
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ],
+        [
+         0.0,
+         2.0,
+         0.0
+        ],
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "end": {
+       "px": [
+        [
+         968.8,
+         637.5
+        ]
+       ],
+       "world": [
+        [
+         1.2,
+         0.8,
+         0.0
+        ]
+       ]
+      },
+      "start": {
+       "px": [
+        [
+         1042.8,
+         389.3
+        ]
+       ],
+       "world": [
+        [
+         -3.0,
+         -1.0,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "path",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": false,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "drawn": 0.7,
+      "kind": "polyline",
+      "length": 8.48528137423857,
+      "points": 3
+     },
+     "style": {
+      "color": "primary",
+      "colormap": "spectrum",
+      "glow": "none",
+      "stroke": "regular"
+     },
+     "tags": [
+      "key"
+     ],
+     "type": "line",
+     "visible_fraction": null
+    },
+    {
+     "bbox": {
+      "norm": [
+       0.548,
+       0.542,
+       0.596,
+       0.613
+      ],
+      "px": [
+       1052.6,
+       585.3,
+       1144.9,
+       661.6
+      ]
+     },
+     "center": {
+      "norm": [
+       0.572,
+       0.577
+      ],
+      "px": [
+       1098.8,
+       623.4
+      ]
+     },
+     "depth": 10.873,
+     "features": {
+      "anchor": {
+       "px": [
+        [
+         1098.6,
+         622.7
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      },
+      "center": {
+       "px": [
+        [
+         1098.6,
+         622.7
+        ]
+       ],
+       "world": [
+        [
+         0.6,
+         1.4,
+         0.0
+        ]
+       ]
+      }
+     },
+     "hidden_by": null,
+     "id": "pole.label",
+     "layer": "world",
+     "note": null,
+     "on_screen_fraction": 1.0,
+     "opacity": 1.0,
+     "region": "center",
+     "relations": [
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "pole",
+       "overlaps": false
+      },
+      {
+       "above": false,
+       "in_front_of": true,
+       "left_of": false,
+       "other": "path",
+       "overlaps": true
+      }
+     ],
+     "semantic": {
+      "kind": "label",
+      "text": "pole"
+     },
+     "style": {
+      "color": "primary",
+      "leader": "hairline",
+      "size": "label"
+     },
+     "tags": [],
+     "type": "text",
+     "visible_fraction": null
+    }
+   ],
+   "occlusion": "analytic",
+   "t": 2.0
+  }
+ }
+}

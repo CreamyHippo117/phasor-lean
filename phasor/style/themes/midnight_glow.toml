@@ -1,0 +1,232 @@
+# midnight_glow: dark blue-black stage, cool primaries, one warm highlight.
+# Colors are sRGB hex; sizes are fractions of the frame height, so a theme looks the same
+# at every resolution.
+
+[palette]
+background = "#0b0e14"
+primary = "#d8dee9"
+secondary = "#7aa2f7"
+muted = "#565f89"
+highlight = "#ffb454"
+danger = "#f7768e"
+
+[stroke]
+hairline = 0.002
+regular = 0.004
+bold = 0.008
+
+[text]
+title = 0.075
+label = 0.042
+annotation = 0.032
+math = 0.048
+
+# Emission strength. Colors are multiplied by this, so anything above 1 is HDR light that
+# the bloom picks up. "none" is plain paint.
+[glow]
+none = 1.0
+soft = 2.5
+strong = 6.0
+
+# Surface materials: the value is the opacity. solid: lit, opaque. glass: lit, see-through,
+# brighter at grazing angles. wire: lit, with a coordinate grid drawn on it. emissive: glows.
+[surface]
+solid = 1.0
+glass = 0.45
+wire = 1.0
+emissive = 1.0
+
+# Cyclic color tables. "oklch L C" is the perceptually even phase wheel at OKLCH lightness
+# L and chroma C; kept darker than the paint colors so glowing curves stand out on it.
+[colormap]
+phase = "oklch 0.52 0.1"
+soft_phase = ["#3b5bdb", "#7048a8", "#b5586f"]
+sequential = ["#0b0e14", "#1f2a4d", "#7aa2f7", "#c0caf5", "#ffb454", "#f7768e", "#3b1f3a"]
+ember = ["#0b0e14", "#3a1f1a", "#a8442a", "#ffb454", "#fff1d6", "#a8442a"]
+ocean = ["#0b0e14", "#12284a", "#1f6f8b", "#7fd1c7", "#e8fbf5", "#1f6f8b"]
+magnitude = ["#4a6fd8", "#3fa7c9", "#57c99a", "#c9d65a", "#f2a54a", "#e5585e"]  # field strength: weak (cool) to strong (warm); starts visible, not at the background
+moonlight = ["#f4f6ff", "#cdd8ff", "#ffffff", "#ffe8d2"]  # palette: white, a cool-warm shimmer
+gold = ["#ffe3a3", "#ffc061", "#ff9a5c", "#ffd27a"]  # palette: warm golds
+glacier = ["#d6f5ff", "#8fd3ff", "#5fa8ff", "#a8f0e6"]  # palette: ice blues and teals
+borealis = ["#7cffc4", "#4fd1c5", "#8a7dff", "#c38bff"]  # palette: green to violet
+rose = ["#ffb3c7", "#ff7aa2", "#c38bff", "#ff9a8a"]  # palette: pinks and violets
+spectrum = "oklch 0.8 0.13"  # an even, bright hue wheel for color running along a curve
+
+# Final look: the light that glow roles add blooms (`threshold` applies only when there is
+# no emission target, e.g. to a raw HDR image); `strength` is how bright the halo is; `levels` is how many
+# halvings the bloom pyramid goes down (wider glow); `exposure` scales before tone mapping;
+# colors below `knee` show exactly as written, light above it rolls off smoothly to white.
+[bloom]
+threshold = 1.0
+strength = 0.8
+levels = 5
+exposure = 1.0
+knee = 0.9
+
+# Narration pacing, in seconds. `lead`: silence before the first sentence; `gap`: between
+# sentences; after a sentence whose block changes N things on screen, wait an extra
+# min(N * pause_per_change, pause_max) so the viewer can look (Scene.pace()).
+[narration]
+words_per_second = 2.6
+lead = 0.5
+gap = 0.3
+pause_per_change = 0.25
+pause_max = 1.5
+
+# 3D camera. `drift`: slow sway in azimuth, degrees either
+# way, over `drift_period` seconds. The camera solver: `fill` is the share of the frame
+# height the kept objects should span, `thirds` and `smooth` are the weights of those goals,
+# `margin` keeps kept objects this far (frame heights) inside the edge. The solver keeps
+# elevation between `min_elevation` and `max_elevation`: a top-down view flattens 3D.
+[camera]
+drift = 3.0
+drift_period = 24.0
+fill = 0.7
+thirds = 0.15
+smooth = 1.0
+margin = 0.05
+min_elevation = -60.0
+max_elevation = 65.0
+
+# Three-point light rig, placed relative to the camera (degrees): key from upper right,
+# fill from the left, rim from behind. `fog` dims and blends far surfaces into the
+# background (0 = none).
+[light]
+key_azimuth = 35.0
+key_elevation = 40.0
+key = 0.85
+fill_azimuth = -55.0
+fill_elevation = 10.0
+fill = 0.3
+rim_azimuth = 165.0
+rim_elevation = 35.0
+rim = 0.45
+ambient = 0.22
+specular = 0.25
+shininess = 32.0
+fog = 0.35
+
+# Layout defaults, as fractions of the frame height.
+[layout]
+gap = 0.012          # space between a label and what it names
+margin = 0.02        # default margin for on_screen()
+leader = 0.09        # how far a leader-line slot sits beyond the compass slots
+
+# Lint thresholds. Move them to change what the linter complains about.
+[lint]
+overlap = 0.03       # share of the smaller object that must be covered to count as overlap
+contrast = 3.0       # minimum WCAG contrast ratio for text against what is behind it
+tiny = 0.006         # objects whose larger side is under this share of the frame height
+text_min = 0.02      # text lower than this share of the frame height
+clutter = 4          # more objects than this changing at once in one block
+crowded = 0.05       # a placed label still covered by more than this share is "unsolved"
+occluded = 0.9       # 3D: a label less visible than this is "occluded_label"
+
+# Aesthetic rules (lint(aesthetic=True)); the taste knobs.
+hues = 3             # color_restraint: more than this many saturated hues on screen
+clip = 0.01          # glow_clip: share of pixels allowed to clip to white after tone mapping
+density_min = 0.04   # density: occupied share of the frame under this is "empty"
+density_max = 0.6    # ... and over this is "crowded"
+rhythm = 0.3         # motion_rhythm: seconds within which unrelated objects should not all move
+margin = 0.05        # margin: content must stay out of this outer share of the frame
+stroke_mix = 2       # stroke_mix: more than this many stroke weights in one frame
+impure = 1e-9        # impure_updater (strict): two answers of one updater may differ by this much
+
+# Living motion. Everything is a smooth deterministic function of
+# (object id, seed, t); scene `life` "off" turns it all off, "subtle" scales amplitudes by
+# `subtle`, "lively" uses them as written. `glow`: bloom swells by this share; `point`: dots
+# drift by this share of their own radius; `field`: color fields turn their colors by this share of the wheel;
+# `shimmer`: glowing strokes vary by this share along their length. Periods in seconds.
+[life]
+glow = 0.12
+glow_period = 5.0
+point = 0.35
+point_period = 4.0
+field = 0.04
+field_period = 18.0
+shimmer = 0.12
+shimmer_period = 3.5
+subtle = 0.5
+
+# Choreography verbs: how long each takes (seconds) and how it eases. `stagger` delays each
+# further object when a verb moves several; `dim_level` is the opacity dim_others leaves.
+[motion]
+stagger = 0.12
+dim_level = 0.25
+orbit_swing = 35.0   # degrees the camera swings during orbit_reveal
+transform_arc = 0.9   # line heights a part arcs by when transform moves it past other parts
+
+[motion.reveal]
+duration = 0.6
+ease = "out"
+
+[motion.exit]
+duration = 0.5
+ease = "in"
+
+[motion.trace]
+duration = 1.4
+ease = "in_out"
+
+[motion.bloom_in]
+duration = 0.8
+ease = "back"
+
+[motion.dim]
+duration = 0.6
+ease = "smooth"
+
+[motion.focus_pull]
+duration = 1.2
+ease = "smoother"
+
+[motion.morph]
+duration = 1.0
+ease = "smoother"
+
+[motion.settle]
+duration = 0.9
+ease = "spring"
+
+# orbit: seconds per full turn of the camera; orbit_reveal: the whole swing.
+[motion.orbit]
+duration = 14.0
+ease = "in_out"
+
+[motion.orbit_reveal]
+duration = 2.4
+ease = "smoother"
+
+# The motion verbs added after the roadmap: an equation becoming the next, a shape becoming
+# another, text writing in, a point travelling a curve, quick emphasis, and a value swept.
+[motion.transform]
+duration = 1.3
+ease = "smoother"
+
+[motion.become]
+duration = 1.3
+ease = "smoother"
+
+[motion.write]
+duration = 1.6
+ease = "smooth"
+
+[motion.travel]
+duration = 3.0
+ease = "in_out"
+
+[motion.flash]
+duration = 0.7
+ease = "out"
+
+[motion.circumscribe]
+duration = 1.1
+ease = "in_out"
+
+[motion.wiggle]
+duration = 0.7
+ease = "smooth"
+
+[motion.sweep]
+duration = 2.5
+ease = "in_out"

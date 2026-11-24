@@ -1,0 +1,119 @@
+# phasor
+
+> GPU-rendered math animations that an AI can see, check and fix. You build a scene with
+> patches over MCP (`phasor mcp`), check it with `review` (lint + inspector + storyboard
+> picture), and fix what it finds. Read docs/ai/MCP.md first.
+
+## Tools
+
+- `scene_new`: Start an empty scene (replaces the open one; save first if it matters). It gets the default look, `prism`, unless a `look` ("prism_everywhere", "calm", "glow", "chalk", or "none" for plain) or a `theme` is given; `life` ("off", "subtle", "lively") is the living motion; `palette` the colors run along strokes (`scene_palette`).
+- `scene_open`: Open `name.phasor.json` (or a `.py` script when the server allows scripts; a script that imports `manim` is run through phasor's Manim stand-in and opens as a plain scene, with `notes` on what could not be carried over).
+- `scene_save`: Save the document (`name.phasor.json`); tweaks to a script scene go to its overrides file beside it.
+- `scene_edit`: Apply a patch (one op, a list of ops, or `{"ops": [...]}`). Atomic: if any op is invalid nothing changes. Returns the result and the lint issues it added or fixed. An `add_object` may name a `preset` (see `object_types`); the scene's look fills in what is left unset, and explicit values always win.
+- `scene_palette`: Pick the colors run along strokes: `spectrum` (the prism rainbow), `moonlight` (white with a cool and warm shimmer), `gold`, `glacier`, `borealis`, `rose`, or None for the theme's own. In the prism looks it recolors every glowing curve and the lines the look runs a hue along; fringes, vignette and glow stay. One undo step.
+- `undo`: Revert the last edit (each patch, verb or narration is one step).
+- `redo`: Re-apply the edit that undo reverted.
+- `animate`: Animate with a choreography verb starting at a marker (or seconds). Timing comes from the theme. Returns when it starts and ends so the next step can follow it. `orbit` swings the 3D camera `value` degrees (default 360), until marker `until` if given; `morph` too runs until `until` if given. `transform` and `become` take `targets=[from, to]`; `sweep` takes `path` and `value`; `circumscribe` takes one target and `value` "circle" or "box".
+- `narrate`: Set the narration. `[[name]]` puts a marker at the next word. Every animation anchored to a marker follows the voice. `pace` adds breathing room after busy sentences.
+- `checkpoint`: Remember the current document under `name` (to compare or return to later).
+- `restore`: Go back to a checkpoint, as one step (undo brings you back again).
+- `diff`: What changed from version `a` to version `b` ('current', 'saved' or a checkpoint).
+- `inspect`: What is on screen at `t`: `brief` (one line each), `standard` or `full`. `full` also gives each object's `params` as the document sets them (expressions stay expressions): how you see what a person changed in the editor.
+- `lint`: Find visual problems (overlap, off-screen, contrast, tiny text, clutter, ...). `fix=True` applies the fixes that are certain, then reports what is left. `aesthetic=True` also judges taste: focal point, color restraint, glow clipping, density, motion rhythm, margins, stroke weights.
+- `storyboard`: Render keyframes on one contact sheet (a PNG) with what the inspector sees in each. `marks` draws every object's box and id so you can tie picture to ids. `compare` puts each frame beside the three nearest frames in the project's `gallery/` (frames you love), with your notes on why they work.
+- `review`: One call for the self-review loop: lint, what is on screen at every marker, and a storyboard. Fix what `issues` lists, then call again until `clean`. Pass `aesthetic=True` for the beauty pass (taste rules on top of the correctness ones).
+- `critique`: The art-director's report: a taste score (0 = nothing to criticise), every aesthetic issue with the markers it happens at and its fixes (`fix` is certain, `suggested` is judgement), and the rubric (STYLE.md) to judge the storyboard by. Look at the picture too: no rule sees everything.
+- `polish`: Apply the critic's fixes (certain ones, then judgement suggestions), at most `rounds` (3) times; each round is undoable. Returns the score before and after and what is left for you to judge.
+- `variants`: Show alternative looks of one beat (a marker name or a time) side by side: as it is, calmer, bolder, each with its taste score. Nothing changes until you `choose`.
+- `choose`: Pick the winner of the last `variants` call. The choice is appended to `style/choices.jsonl` (your taste as data) and, with `apply`, its changes are made to the scene.
+- `events`: The event log: when things get hidden, leave or enter the frame, change region or gain an occluder, with the nearest marker and fix hints. `problems_only` keeps the ones a viewer would notice (a label or key object hidden or leaving the frame).
+- `when_hidden`: Time spans where `id` is on screen but less than half of it is visible.
+- `free_space_near`: Empty label-sized places around `id` at `t`, nearest first (boxes are 0-1, top-left origin): where a label or note could go.
+- `hit_test`: Objects under an output-pixel point (origin top-left), topmost first.
+- `resolve`: Turn words like 'the pole on the left' or 'label of the loop' into object ids.
+- `render`: Render a video (preset: preview 960x540@30, draft 640x360@15 (fastest, roughest), final, 4k) or one PNG (`frame`).
+- `docs_search`: Search the API reference, patterns, pitfalls and examples.
+- `object_types`: What a patch may add: object types (use these exact names in `add_object`) with their parameters and defaults and style keys (role group, default role), the role names each group accepts (style takes roles, never raw colors), and the themes.
+
+## Object types (use these names in add_object)
+
+- `arrow`: flash, start, end
+- `axes`: flash, dims, x_range, y_range, z_range, pos, scale, tick, labels
+- `callout`: flash, target, shape, pad, progress
+- `cayley_graph`: flash, group, generators, pos, r, draw
+- `cayley_table`: flash, group, pos, cell, reveal, subgroup, cosets
+- `clock_diagram`: flash, n, step, pos, r, cosets
+- `complex_map`: flash, function, pos, center, extent, lines, samples, amount, limit
+- `convolution`: flash, f, g, f_support, g_support, pos, extent, progress, ghost, shade, hue_cycles
+- `counter`: flash, value, digits, prefix, suffix, math, pos, anchor
+- `directivity`: flash, kind, elements, spacing, radius, frequency, steer, pos, size
+- `domain_coloring`: flash, function, pos, size, contour, softness, hue, radius, ambient, lines, a, to, blend, line_glow, light
+- `doppler`: flash, speed, frequency, time, pos, size
+- `dot`: flash, pos, r
+- `eigen_lines`: flash, matrix, pos, length
+- `epicycles`: flash, points, terms, phase, trace
+- `equation`: flash, parts, colors, pos, write, drift, keys, from_parts, from_colors, from_keys, from_pos, from_id, morph, arc
+- `filtered_signal`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, frequencies, amplitudes, duration, progress
+- `filtered_spectrum`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, frequencies, amplitudes, window, samples, fade, envelope
+- `fixed_points`: flash, f, g, constants, pos, extent, rays, labels, ray_length, reveal, grid
+- `flow_lines`: flash, fp, fq, fr, pos, extent, seeds, steps, length, both, progress
+- `flow_particles`: flash, fp, fq, fr, pos, extent, count, speed, lifetime, tail, seed
+- `fractal`: flash, kind, c, pos, size, max_iter, density, hue, center, zoom, steady, radius, ambient, count, seed, exposure, point_size, white
+- `frequency_response`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, plot, scale, floor_db, reveal
+- `galois_diagram`: flash, primes, pos, width, height, gap
+- `graph`: flash, function, xmin, xmax, pos
+- `homomorphism`: flash, n, m, a, pos, r, gap, progress
+- `image`: flash, path, pos, width, height, frame
+- `image_sources`: flash, size, source, order, material, absorption, r
+- `impulse_response`: flash, size, source, listener, order, material, absorption, pos, extent, duration, reveal, show_rt60
+- `interference`: flash, frequency, speed, time, mode, blend, amplitudes, onsets, pos, size, gain, markers, hue_cycles, hue, isolines, fade, ambient, contrast, sources, phases
+- `limit`: flash, function, a, epsilon, xmin, xmax, pos, bands
+- `line`: flash, points, progress, hue_along, hue
+- `linear_system`: flash, matrix, pos, extent, seeds, n_seeds, t_end, steps, progress, backward, labels, hue_cycles, seed
+- `listener`: flash, pos, r
+- `loop_integral`: flash, p, q, measure, center, radius, pos, progress, arrows
+- `matrix`: flash, matrix, pos, digits
+- `network`: flash, path, edges, nodes, generator, branching, depth, rows, cols, n, p, k, cube_dim, symmetric, layout, dims, iterations, root, seed, pos, size, color_by, grow, node_size, hue, exposure, cross_edges
+- `parametric_curve`: flash, fx, fy, fz, t_range, samples, pos, scale, progress, color_by, hue, to_fx, to_fy, to_fz, blend
+- `parametric_surface`: flash, fx, fy, fz, u_range, v_range, res, pos, scale, color_by, color_expr, with_map, domain_pos, domain_size, morph, to_fx, to_fy, to_fz, blend
+- `partial_sum`: flash, kind, terms, pos, extent, reveal
+- `pde_field`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, kind, time, pos, size, n, diffusivity, speed, mode, feed, kill, seed, scale
+- `pde_modes`: flash, time, pos, extent, length, diffusivity, modes, count, boundary, components, ymax
+- `pde_profile`: flash, kind, time, pos, extent, length, n, diffusivity, speed, modes, potential, dt, exact, ymax, boundary, method
+- `pde_slice`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, time, pos, side, cube, n, diffusivity, mode, axis, at, scale
+- `pde_surface`: flash, kind, time, pos, size, n, diffusivity, speed, mode, feed, kill, seed, scale, height, hue_cycles, hue, contrast, lines
+- `permutation`: flash, perm, pos, spacing, progress
+- `phase_portrait`: flash, f, g, constants, pos, extent, seeds, n_seeds, t_end, steps, progress, backward, flow, flow_spacing, nullclines, hue_cycles, seed
+- `phased_array`: flash, frequency, speed, time, mode, blend, amplitudes, onsets, pos, size, gain, markers, hue_cycles, hue, isolines, fade, ambient, contrast, center, count, spacing, layout, axis, steer, ray
+- `point_cloud`: flash, source, degree, coefficients, kind, constants, max_iter, points, values, count, seed, pos, size, scale, point_size, exposure, hue, color_by, twist, twinkle, white, map, r_range, x_range, r_focus, x_focus, focus, x0, n_iter, n_keep, sweep
+- `pole_zero`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, size, scale, probe
+- `polygon`: flash, n, pos, r, rotation, flip, fill
+- `pressure_slice`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, size, origin, source, z, time, dx, material, absorption, frequency, gain, seed
+- `riemann_sum`: flash, function, a, b, n, rule, pos
+- `riemann_surface`: flash, kind, pos, radius, height, scale, rings, segments
+- `room`: flash, size, origin, material, absorption
+- `room3d`: flash, size, origin, path, scale, material, absorption, walls, edge_angle
+- `sound_rays`: flash, room, source, time, speed, hue_step, count, bounces, trail, seed
+- `source`: flash, pos, r
+- `spectrogram`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, f0, f1, signal, wav, duration, fs, nwin, hop, window, fmax, playhead, pos, size
+- `spectrum`: flash, frequencies, amplitudes, window, samples, fs, pos, extent, bins
+- `strange_attractor`: flash, system, sigma, rho, beta, seed, t_end, progress, pos, size
+- `subgroup_lattice`: flash, group, pos, width, height
+- `taylor`: flash, function, center, order, xmin, xmax, ymax, pos
+- `text`: flash, text, pos, anchor, leader, leader_on, write
+- `tracer`: flash, path, progress, trail, r
+- `transform_grid`: flash, matrix, pos, extent, spacing, square, basis, flow, flow_time
+- `value`: flash, value
+- `vector_field`: flash, p, q, pos, extent, spacing, color_by_size, length_by
+- `vector_field_3d`: flash, fp, fq, fr, pos, extent, counts, spacing, color_by_size, length_by
+- `wavefront`: flash, center, radius, rings
+- `wavefront3d`: flash, room, source, time, speed, hue_step, order, shell, samples
+- `winding`: flash, frequencies, amplitudes, fs, samples, freq, max_freq, progress, size, pos, hue_along, spectrum_guide
+
+## Docs
+
+- docs/ai/MCP.md: the loop, every tool, every patch operation (all examples are tested)
+- docs/ai/API.md: the Python API, one example per name
+- docs/ai/PATTERNS.md: idioms (label a pole, tie parameters, narrate and animate)
+- docs/ai/PITFALLS.md: known traps and how the linter reports them
+- examples/: small tested scenes

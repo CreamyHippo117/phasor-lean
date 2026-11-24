@@ -1,0 +1,141 @@
+{
+  "cameras": [
+    {
+      "id": "camera",
+      "kind": "ortho",
+      "params": {
+        "height": 8.0
+      }
+    }
+  ],
+  "constraints": [],
+  "meta": {
+    "color_space": "srgb",
+    "duration": null,
+    "fps": 60.0,
+    "height": 1080,
+    "source": "script",
+    "theme": "midnight_glow",
+    "title": "moving_dot",
+    "width": 1920
+  },
+  "objects": [
+    {
+      "id": "axis",
+      "layer": "world",
+      "params": {
+        "points": [
+          [
+            -7.0,
+            0.0
+          ],
+          [
+            7.0,
+            0.0
+          ]
+        ]
+      },
+      "style": {
+        "color": "muted",
+        "stroke": "hairline"
+      },
+      "tags": [],
+      "type": "line"
+    },
+    {
+      "id": "dot",
+      "layer": "world",
+      "params": {
+        "pos": [
+          -4.0,
+          0.0
+        ],
+        "r": 0.25
+      },
+      "style": {
+        "color": "highlight"
+      },
+      "tags": [
+        "key"
+      ],
+      "type": "dot"
+    },
+    {
+      "id": "dot_label",
+      "layer": "world",
+      "params": {
+        "pos": {
+          "expr": "dot.pos + vec(0, 0.7, 0)"
+        },
+        "text": "z"
+      },
+      "style": {
+        "size": "math"
+      },
+      "tags": [],
+      "type": "text"
+    },
+    {
+      "id": "planet",
+      "layer": "world",
+      "params": {
+        "pos": [
+          0.0,
+          0.0
+        ],
+        "r": 0.8,
+        "z_index": 1.0
+      },
+      "style": {
+        "color": "secondary"
+      },
+      "tags": [
+        "key"
+      ],
+      "type": "dot"
+    }
+  ],
+  "retired_ids": [],
+  "schema_version": 3,
+  "timeline": {
+    "camera": "camera",
+    "markers": {
+      "go": 1.0,
+      "leave": 4.0
+    },
+    "tracks": {
+      "dot.pos": [
+        {
+          "ease": "smooth",
+          "t0": {
+            "marker": "go",
+            "offset": 0.0
+          },
+          "t1": {
+            "marker": "go",
+            "offset": 2.0
+          },
+          "to": [
+            4.0,
+            0.0
+          ]
+        },
+        {
+          "ease": "linear",
+          "t0": {
+            "marker": "leave",
+            "offset": 0.0
+          },
+          "t1": {
+            "marker": "leave",
+            "offset": 2.0
+          },
+          "to": [
+            9.0,
+            0.0
+          ]
+        }
+      ]
+    }
+  }
+}

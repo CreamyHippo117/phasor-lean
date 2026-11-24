@@ -1,0 +1,16 @@
+description = "The house look, gently alive: dark stage, soft contour edges, slow breathing glow and drift."
+theme = "midnight_glow"
+life = "subtle"
+
+[defaults.domain_coloring.params]
+softness = 0.8
+contour = 0.3
+
+[defaults.fractal.style]
+colormap = "ocean"
+
+[defaults.line.style]
+glow = "soft"
+
+[defaults.dot.style]
+glow = "soft"

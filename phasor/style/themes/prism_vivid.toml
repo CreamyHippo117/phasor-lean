@@ -1,0 +1,11 @@
+# The prism theme with its hue on every glowing stroke, not only plain lines: graphs,
+# Fourier partial sums and epicycles, parametric curves, contours and the rest run the
+# spectrum along their length and let it drift. Strokes that do not glow (axes, grids) keep
+# their color, and objects that color by meaning (flow lines by speed, fields by strength)
+# keep theirs. Used by the `prism_everywhere` look.
+base = "prism"
+
+[strokes]
+hue_along = 0.8   # spectrum cycles along each glowing stroke
+colormap = "spectrum"
+flow = 0.04       # the colors drift along the stroke this many cycles a second

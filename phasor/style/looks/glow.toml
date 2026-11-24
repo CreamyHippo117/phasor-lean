@@ -1,0 +1,16 @@
+description = "Dark stage with lively bloom: everything breathes, strokes and points glow."
+theme = "midnight_glow"
+life = "lively"
+
+[defaults.domain_coloring.params]
+softness = 0.6
+
+[defaults.fractal.style]
+colormap = "ember"
+
+[defaults.line.style]
+glow = "strong"
+stroke = "bold"
+
+[defaults.dot.style]
+glow = "strong"

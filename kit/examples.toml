@@ -1,0 +1,216 @@
+# Every scene in examples/, sorted for the AI that writes scenes (`phasor kit` copies them to
+# kit/examples/<kind>/ and writes kit/examples/INDEX.md from this file).
+#
+# tier = "model":     the look and pacing to aim for. Must pass `phasor lint --aesthetic
+#                     --strict` with nothing left (tests/test_kit.py checks it).
+# tier = "technique": shows how to do something (narration, a 3D camera, the verbs). Copy
+#                     the technique, not the look: it still has taste warnings.
+# tier = "reference": a tour of a module's objects. For API usage only.
+# tier = "hidden":    not for the AI (deliberately bad scenes, developer demos). Not copied.
+#
+# A test fails if an example is missing here, so new examples must be sorted on arrival.
+#
+
+[kinds]
+complex = "Complex analysis: domain coloring, poles and residues, contours, Riemann surfaces"
+fractals = "Fractals: the Mandelbrot and Julia sets, deep zooms"
+motion = "Motion: the verbs, morphing, tracing, counters, warped grids"
+three_d = "3D: axes, curves and surfaces in space, camera orbits"
+fourier_linalg = "Fourier series and linear algebra"
+physics = "Physics and PDEs: heat, waves, acoustics"
+basics = "The smallest scenes: one idea, a few objects"
+
+[examples.prism_primes]
+kind = "complex"
+tier = "model"
+teaches = "The reference look (prism): glowing strokes with a spectrum, typeset equations, calm pacing"
+
+[examples.deep_zoom]
+kind = "fractals"
+tier = "technique"
+teaches = "A dive into the Mandelbrot set to 1e-30: a kernel-drawn field, camera zoom over time"
+
+[examples.residue_theorem]
+kind = "complex"
+tier = "technique"
+teaches = "A narrated short: [[markers]] in the narration, every motion anchored to a marker with a verb"
+
+[examples.residues]
+kind = "complex"
+tier = "technique"
+teaches = "Domain coloring of a function with a glowing contour on top"
+
+[examples.riemann_sqrt]
+kind = "three_d"
+tier = "technique"
+teaches = "A Riemann surface in 3D; the camera orbits on its own and labels stay readable"
+
+[examples.motion_gallery]
+kind = "motion"
+tier = "technique"
+teaches = "One beat per verb: an equation becomes the next, a tracer, a counter, a warped grid, particles"
+
+[examples.basics_3d]
+kind = "three_d"
+tier = "technique"
+teaches = "3D basics: axes with ticks, a helix colored along its length, a formula surface, a vector field"
+
+[examples.room_acoustics]
+kind = "physics"
+tier = "technique"
+teaches = "A simulation (FDTD pressure wave) with the camera swinging while the wave crosses a room"
+
+[examples.fourier_linalg]
+kind = "fourier_linalg"
+tier = "reference"
+teaches = "The Fourier and linear-algebra objects: epicycles, partial sums, spectra, transform grids"
+
+[examples.heat_dihedral]
+kind = "physics"
+tier = "reference"
+teaches = "The heat equation and the dihedral group's objects"
+
+[examples.more_wave2]
+kind = "physics"
+tier = "reference"
+teaches = "One of each of the later wave, algebra and calculus objects"
+
+[examples.julia_explorer]
+kind = "fractals"
+tier = "reference"
+teaches = "A Julia set with a slider for c (an interactive control)"
+
+[examples.moving_dot]
+kind = "basics"
+tier = "reference"
+teaches = "The smallest scene: a labeled dot crosses the frame and passes behind a disc"
+
+[examples.open_contract]
+kind = "basics"
+tier = "technique"
+teaches = "A scene's own types: a new shape from Params and draw, a composite, a Value, and updaters that keep a label on a moving dot"
+
+[examples.prism_domain]
+kind = "complex"
+tier = "technique"
+teaches = "Domain coloring in the prism look: zeros and poles as points of light, phase rays and modulus rings as thin light"
+
+[examples.prism_transitions]
+kind = "complex"
+tier = "technique"
+teaches = "Smooth transitions: a constant drifting (zeros and poles glide), one function blending into another, equations rearranging as they are solved (keys, arcs, morph until a marker)"
+
+[examples.prism_heat]
+kind = "physics"
+tier = "technique"
+teaches = "Heat maps in the prism look: a spreading hot spot, a drum mode, a spectrogram, glowing isolines"
+
+[examples.prism_drum_3d]
+kind = "physics"
+tier = "technique"
+teaches = "The prism look in 3D: a vibrating drum as a dark landscape under a net of glowing lines, the camera orbiting"
+
+[examples.point_cloud]
+kind = "complex"
+tier = "technique"
+teaches = "A point cloud in the prism look: a million polynomial roots splatted as light; a tweened twist makes the roots glide and the ring tear open, white-hot dense parts, twinkle, a slow camera fall into fine structure"
+
+[examples.prism_fractal]
+kind = "fractals"
+tier = "technique"
+teaches = "Fractals in the prism look: a Julia set morphing as c drifts, a short Mandelbrot dive, the edge of the set glowing"
+
+[examples.picture]
+kind = "basics"
+tier = "technique"
+teaches = "A picture in a scene: a PNG next to the script, placed, sized, framed and animated like any object"
+
+[examples.phase_portrait]
+kind = "physics"
+tier = "technique"
+teaches = "A damped pendulum's phase portrait: trajectories flowing, then its rest points and their stability"
+
+[examples.game_tree]
+kind = "basics"
+tier = "technique"
+teaches = "A network: every tic-tac-toe position joined to the next, laid out and grown edge by edge"
+
+[examples.cluttered]
+tier = "hidden"
+why = "deliberately cluttered, to show the linter flagging it"
+
+[examples.rough_beauty]
+tier = "hidden"
+why = "deliberately rough, to show the critic improving it"
+
+[examples.sketch_contour]
+tier = "hidden"
+why = "the sketch demo (sketching is hidden for now)"
+
+[examples.manim_reverb]
+tier = "hidden"
+why = "a Manim script, kept to test the importer"
+
+[examples.domain_coloring]
+tier = "hidden"
+why = "kernel-level demo, not a scene"
+
+[examples.room_3d]
+kind = "physics"
+tier = "technique"
+teaches = "Sound in a 3D room: rays and fronts bouncing off the walls, an orbiting camera, an impulse response filling in"
+
+[examples.linear_system]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "x' = A x: a saddle's eigenvector lines, trajectories, and a grid carried along the flow"
+
+[examples.convolution]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "Live convolution: a kernel flipped and sliding, the overlap lit, the output traced as it is made"
+
+[examples.filtering]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "A low-pass filter: poles and zeros over its transfer function, gain and phase, a signal and its spectrum cut"
+
+[examples.fourier_winding]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "The Fourier transform as a winding picture: a wound signal, its centre of mass and the spectrum it traces"
+
+[examples.prism_spectrogram]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "A spectrogram of a formula in the prism look, with a glowing playhead sweeping it"
+
+[examples.directivity]
+kind = "physics"
+tier = "technique"
+teaches = "Polar patterns: a steered array, a baffled piston and a cardioid"
+
+[examples.doppler]
+kind = "physics"
+tier = "technique"
+teaches = "Doppler: wavefronts bunching ahead of a moving source, then the Mach cone"
+
+[examples.strange_attractor]
+kind = "physics"
+tier = "technique"
+teaches = "The Lorenz attractor traced in 3D with hue along time as the camera circles"
+
+[examples.buddhabrot]
+kind = "fractals"
+tier = "technique"
+teaches = "The Buddhabrot, cx.Fractal's cloud mode: millions of escaping orbits splatted as glowing light, coloured by escape time, a slow camera drift"
+
+[examples.bifurcation]
+kind = "physics"
+tier = "technique"
+teaches = "The logistic map's bifurcation diagram as a glowing point cloud: a sweep in from the left, a focus zoom into the period doublings, then into the window of period three"
+
+[examples.interference]
+kind = "physics"
+tier = "technique"
+teaches = "Wave fields on the GPU: two sources interfering, then a phased array steering its beam"

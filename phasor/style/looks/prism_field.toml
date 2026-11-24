@@ -1,0 +1,11 @@
+description = "The prism look for scenes on a glowing field (domain coloring): equations drift less, and the field is more see-through, its colour wash darker between the lines, with brighter rays, rings, zeros and poles making up for it. Everything else is prism."
+base = "prism"
+
+[defaults.equation.params]
+drift = 0.6  # a share of the theme's [life] float: equations over a field move a little less
+
+[defaults.domain_coloring.params]
+radius = 0.24     # prism: 0.35; a shorter haze tail, so more of the dark shows through
+ambient = 0.04    # prism: 0.06
+line_glow = 0.9   # kernel default 0.6: the rays and rings carry more light
+light = 1.3       # the zeros, poles and lines send 30% more light to the glow

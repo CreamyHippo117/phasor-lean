@@ -1,0 +1,7 @@
+description = "Opt-in light look: paper page, ink strokes, no glow, crisp edges, perfectly still."
+theme = "paper"
+life = "off"
+
+[defaults.domain_coloring.params]
+softness = 0.0
+contour = 0.25

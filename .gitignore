@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.phasor_cache/
+*.overrides.json.bak
+.claude/settings.local.json
+examples/out/
+
+# Narration clips are regenerated from the script by the voice (cached per sentence).
+*.narration/
+.phasor/
+
+.claude/worktrees/
+out/

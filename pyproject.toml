@@ -1,0 +1,149 @@
+[project]
+name = "phasor"
+version = "0.0.1"
+description = "GPU-rendered math animations that an AI can see, check and fix."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+license-files = ["LICENSE"]
+dependencies = [
+    "kiwisolver>=1.5.1",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pillow>=13.0.0",
+    "pydantic>=2.7",
+    "scipy>=1.13",
+    "sympy>=1.14.0",
+]
+
+[project.optional-dependencies]
+# OpenGL raster + id/solo passes. Needed for tiers A and B.
+gl = ["moderngl>=5.12"]
+# CUDA compute. The [ctk] extra pulls NVRTC and cudart from pip,
+# so users need neither the CUDA Toolkit nor a C++ compiler.
+gpu = ["cupy-cuda12x[ctk]>=13.3"]
+# Video encoding (NVENC when the driver supports it, libx264 otherwise).
+encode = ["av>=14"]
+all = ["phasor[gl,gpu,encode,mcp,gui,notebook]"]
+# The MCP server an AI client connects to (`phasor mcp`).
+mcp = ["mcp>=2.0,<3"]
+# Jupyter widgets for interactive scenes (`phasor.interactive.notebook`).
+notebook = ["ipywidgets>=8"]
+# The editor window (`phasor gui`): Qt widgets only, no web engine.
+gui = [
+    "pyside6-essentials>=6.7",
+]
+
+[project.scripts]
+phasor = "phasor.cli:main"
+
+# The editor as a program of its own: no console window on Windows, a launcher elsewhere.
+[project.gui-scripts]
+phasor-gui = "phasor.gui.cli:main"
+
+# Sibling clients add their own commands (`phasor mcp`) without `cli` importing them.
+[project.entry-points."phasor.commands"]
+mcp = "phasor.mcp.cli:register"
+gui = "phasor.gui.cli:register"
+manim = "phasor.importers.cli:register"
+sketch = "phasor.sketch.cli:register"
+
+[project.entry-points."phasor.panels"]
+sketch = "phasor.sketch.panel:make"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "import-linter>=2.1",
+]
+# Building the desktop app (packaging/README.md).
+package = ["pyinstaller>=6.10"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["phasor"]
+
+# The AI docs and examples travel with the package so `docs_search` works when installed.
+[tool.hatch.build.targets.wheel.force-include]
+"docs/ai" = "phasor/_docs/docs/ai"
+"examples" = "phasor/_docs/examples"
+"kit" = "phasor/_docs/kit"
+"skills" = "phasor/_docs/skills"
+"STYLE.md" = "phasor/_docs/STYLE.md"
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".claude/worktrees"]  # agents' working copies
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests hold dense tables of cases; long lines and literal match strings are fine there.
+"tests/*" = ["E501", "RUF043"]
+# Written exactly as a Manim script is (the point of the Manim import): a star import.
+"examples/manim_reverb.py" = ["F403", "F405"]
+# The maths converter maps Unicode letters and symbols (π, ≤, ℝ) to LaTeX on purpose.
+"phasor/core/texconv.py" = ["RUF001"]
+"tests/test_texconv.py" = ["RUF001"]
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "gl: needs an OpenGL 4.3 context (skipped automatically when none is available)",
+    "gpu: needs a working CUDA device (skipped automatically when none is available)",
+    "slow: takes more than a few seconds",
+]
+
+# ---------------------------------------------------------------- import-linter
+# Contract 6 (CONTRIBUTING.md), with the placements fixed in docs/decisions/0001-layers.md.
+# Higher layers may import lower ones, never the reverse.
+[tool.importlinter]
+root_package = "phasor"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layer order (contract 6, ADR 0001)"
+type = "layers"
+layers = [
+    "phasor.cli | phasor.gui | phasor.mcp | phasor.sketch",
+    "phasor.workspace",
+    "phasor.importers",
+    "phasor.scene",
+    "phasor.voice",
+    "phasor.interactive",
+    "phasor.engine",
+    "phasor.domains",
+    "phasor.render",
+    "phasor.inspect",
+    "phasor.layout",
+    "phasor.time",
+    "phasor.style",
+    "phasor.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "GPU-free layers import no GPU, GL or video library (contract 6)"
+type = "forbidden"
+source_modules = [
+    "phasor.core",
+    "phasor.style",
+    "phasor.time",
+    "phasor.layout",
+]
+forbidden_modules = [
+    "cupy",
+    "cuda",
+    "moderngl",
+    "moderngl_window",
+    "av",
+    "glfw",
+]

@@ -1,0 +1,261 @@
+description = "The reference look: near-black, curves glowing with warm and cool fringes and a hue running along them, drifting equations, darker corners. No axes unless a scene asks."
+theme = "prism"
+life = "lively"
+
+[defaults.line.params]
+dim = 0.9  # a little see-through: what is behind glows through
+hue_along = 0.8
+
+[defaults.line.style]
+glow = "strong"
+stroke = "regular"
+
+[defaults.dot.style]
+glow = "strong"
+color = "primary"
+
+[defaults.equation.style]
+glow = "soft"
+
+[defaults.text.style]
+color = "primary"
+
+[defaults.domain_coloring.params]  # the prism preset: glowing zeros, poles, rays and rings
+dim = 0.88  # a little see-through: what is behind glows through
+radius = 0.35
+ambient = 0.06
+contour = 0.0
+lines = 12
+
+[defaults.domain_coloring.style]
+glow = "strong"
+
+[defaults.fractal.params]  # the prism preset: the set dark, its edge glowing
+radius = 0.01
+ambient = 0.03
+exposure = 0.06  # buddhabrot (the cloud mode): light per orbit point
+white = 0.8     # buddhabrot: the densest orbits run white-hot
+
+[defaults.fractal.style]
+colormap = "ocean"
+glow = "soft"  # strong glow whited out the dense filaments of a dive
+
+# heat maps: smooth, dark where quiet and glowing where strong in spectrum hues that
+# run with the value, contour lines of light, edges melting into the dark
+# (the same values as heatmap.PRISM)
+[defaults.pde_field.params]
+dim = 0.88  # a little see-through: what is behind glows through
+smooth = true
+isolines = 8
+hue_cycles = 1.6
+fade = 0.1
+ambient = 0.0
+contrast = 2.0
+
+[defaults.pde_field.style]
+glow = "soft"
+colormap = "spectrum"
+
+[defaults.pde_slice.params]
+dim = 0.88  # a little see-through: what is behind glows through
+smooth = true
+isolines = 8
+hue_cycles = 1.6
+fade = 0.1
+ambient = 0.0
+contrast = 2.0
+
+[defaults.pde_slice.style]
+glow = "soft"
+colormap = "spectrum"
+
+[defaults.pressure_slice.params]
+dim = 0.88  # a little see-through: what is behind glows through
+smooth = true
+isolines = 8
+hue_cycles = 1.6
+fade = 0.1
+ambient = 0.0
+contrast = 2.0
+
+[defaults.pressure_slice.style]
+glow = "soft"
+colormap = "spectrum"
+
+[defaults.spectrogram.params]
+dim = 0.88  # a little see-through: what is behind glows through
+smooth = true
+isolines = 8
+hue_cycles = 1.6
+fade = 0.1
+ambient = 0.0
+contrast = 2.0
+
+[defaults.spectrogram.style]
+glow = "soft"
+colormap = "spectrum"
+
+# the height mode in 3D: a dark landscape in spectrum hues under a net of glowing
+# lines (the same values as pde.Surface's prism preset)
+[defaults.pde_surface.params]
+hue_cycles = 1.6
+contrast = 1.5
+lines = 24
+
+[defaults.pde_surface.style]
+colormap = "spectrum"
+glow = "strong"
+material = "glass"
+
+# point clouds: palette hue, glow and haze
+[defaults.point_cloud.params]
+exposure = 0.06
+point_size = 0.9
+white = 0.8     # the densest parts run white-hot
+twinkle = 0.6   # each point's light flickers a little (life)
+
+[defaults.point_cloud.style]
+colormap = "spectrum"
+glow = "strong"
+
+# a 3D room with sound bouncing in it: faint glowing edges, rays and
+# fronts colored from the palette by reflection count
+[defaults.room3d.style]
+glow = "soft"
+
+[defaults.sound_rays.style]
+glow = "strong"
+colormap = "spectrum"
+
+[defaults.wavefront3d.style]
+glow = "strong"
+colormap = "spectrum"
+
+[defaults.counter.style]
+glow = "soft"
+
+[defaults.flow_particles.style]
+glow = "strong"
+
+[defaults.network.params]
+color_by = "depth"
+dim = 0.75  # graphs stack many edges: a little dimmer, so crossings do not pile up to white
+
+[defaults.network.style]
+glow = "soft"
+
+# the rest of the prism look: everything but axes and photos
+[defaults.cayley_table.style]
+glow = "soft"
+
+[defaults.clock_diagram.style]
+glow = "strong"
+
+[defaults.matrix.style]
+glow = "soft"
+
+[defaults.room.style]
+glow = "strong"
+
+[defaults.parametric_surface.style]
+material = "glass"
+
+[defaults.riemann_surface.style]
+material = "glass"
+
+# dynamical systems: trajectories glow, the arrow field and nullclines stay faint
+[defaults.phase_portrait.params]
+dim = 0.9
+flow = true
+
+[defaults.phase_portrait.style]
+glow = "strong"
+
+[defaults.fixed_points.style]
+glow = "strong"
+
+# linear systems: the same glow as the phase portrait, modes and grid are the linalg objects'
+[defaults.linear_system.params]
+dim = 0.9  # a little see-through, as the phase portrait
+
+[defaults.linear_system.style]
+glow = "strong"
+
+# live convolution: two glowing signals, the product lit, the output as light
+[defaults.convolution.params]
+dim = 0.92
+
+[defaults.convolution.style]
+glow = "strong"
+
+# filtering: the plane's markers and the response curves glow, bars glow softly
+[defaults.pole_zero.params]
+dim = 0.9  # a little see-through, like the other prism types
+
+[defaults.pole_zero.style]
+glow = "strong"
+
+[defaults.frequency_response.params]
+dim = 0.9  # a little see-through, like the other prism types
+
+[defaults.frequency_response.style]
+glow = "strong"
+
+[defaults.filtered_signal.params]
+dim = 0.9  # a little see-through, like the other prism types
+
+[defaults.filtered_signal.style]
+glow = "strong"
+
+[defaults.filtered_spectrum.params]
+dim = 0.9  # a little see-through, like the other prism types
+
+[defaults.filtered_spectrum.style]
+glow = "soft"
+
+[defaults.winding.params]
+hue_along = 1.0
+
+[defaults.winding.style]
+glow = "strong"
+
+[defaults.directivity.style]
+glow = "strong"
+
+[defaults.doppler.style]
+glow = "strong"
+
+[defaults.strange_attractor.params]
+dim = 0.82
+
+[defaults.strange_attractor.style]
+glow = "strong"
+colormap = "spectrum"
+
+# wave fields of point sources: dark where the waves cancel, crests
+# and troughs glowing in spectrum hues half a wheel apart (the same values as waves.PRISM)
+[defaults.interference.params]
+dim = 0.88  # a little see-through: what is behind glows through
+hue_cycles = 0.5
+isolines = 5
+fade = 0.08
+ambient = 0.0
+contrast = 1.6
+gain = 1.2
+
+[defaults.interference.style]
+glow = "soft"
+colormap = "spectrum"
+
+[defaults.phased_array.params]
+dim = 0.88  # a little see-through: what is behind glows through
+hue_cycles = 0.5
+isolines = 5
+fade = 0.08
+ambient = 0.0
+contrast = 1.6
+gain = 1.2
+
+[defaults.phased_array.style]
+glow = "soft"
+colormap = "spectrum"
