@@ -30,9 +30,9 @@ Optional extras, added with more `--extra NAME` flags (or `--all-extras`):
 
 | Extra | What it adds |
 | --- | --- |
-| `gl` | OpenGL drawing (needs OpenGL 4.3). Without it phasor draws in software. |
+| `gl` | OpenGL drawing (needs OpenGL 4.3). Needed for pictures and videos; without it you still get lint, inspect and the timeline. |
 | `encode` | Video files (`phasor render`). Uses NVENC when the driver has it. |
-| `gpu` | CUDA for fields, fractals and point clouds on NVIDIA cards. No CUDA Toolkit needed. Without it the same kernels run on the CPU. |
+| `gpu` | CUDA for fields, fractals and point clouds on NVIDIA cards. No CUDA Toolkit needed. Without it the same kernels run on the CPU, more slowly. |
 | `mcp` | The MCP server an AI client talks to (`phasor mcp`). |
 | `gui` | The desktop editor (`phasor gui`). |
 | `notebook` | Sliders in Jupyter. |
@@ -131,7 +131,7 @@ real TeX instead (`latex` and `dvipng` on the PATH).
 
 ## Examples
 
-Render any of them with `uv run phasor render examples/NAME.py -o out/NAME.mp4`, or open
+Render most of them with `uv run phasor render examples/NAME.py -o out/NAME.mp4`, or open
 them in the editor. A few to start with:
 
 | Example | What it shows |
@@ -166,8 +166,8 @@ them in the editor. A few to start with:
 
 Tested on Windows 11 with an NVIDIA RTX 4070 Ti, and on Linux with software OpenGL (CI runs
 Ubuntu and Windows, Python 3.11 and 3.12). macOS is untested. Without an NVIDIA card the GPU
-kernels run on the CPU, compiled with `g++` or `clang++` when one is on the PATH;
-`phasor doctor` says which path your machine takes.
+kernels run on the CPU: compiled with `g++` or `clang++` when one is on the PATH, otherwise
+as plain NumPy (slow for final renders). `phasor doctor` says which path your machine takes.
 
 ## Contributing
 

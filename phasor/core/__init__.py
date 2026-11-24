@@ -1,1 +1,1 @@
-"""phasor.core: the document schema, ids, expressions and simulations (no GPU code)."""
+"""phasor.core: the document schema, ids, patches, constraints and simulations (no GPU code)."""

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from phasor.cli import EXIT_NOT_IMPLEMENTED, PLANNED, main
+from phasor.cli import main
 from phasor.render.doctor import (
     Check,
     DoctorReport,
@@ -115,9 +115,3 @@ def test_cli_doctor_require_tier(capsys):
     assert main(["doctor", "--require", "C"]) == 0
     rc = main(["doctor", "--require", "A"])
     assert rc == (0 if tier == "A" else 1)
-
-
-@pytest.mark.parametrize("command", sorted(PLANNED))
-def test_planned_commands_say_which_milestone(command, capsys):
-    assert main([command]) == EXIT_NOT_IMPLEMENTED
-    assert f"Milestone {PLANNED[command][0]}" in capsys.readouterr().err

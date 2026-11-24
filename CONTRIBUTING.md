@@ -68,10 +68,10 @@ them needs a decision record in `docs/decisions/`.
 
 | Layer | What it holds |
 | --- | --- |
-| `core` | schema, ids, expressions, migrations, `Simulation` |
+| `core` | the document schema, ids, patches, migrations, the constraint language (`core/constraints.py`), text and math layout, `Simulation` |
 | `style` | themes (`.toml`), roles, looks and presets |
-| `time` | the timeline, tracks, easing and the choreography verbs (`time/verbs.py`) |
-| `layout` | constraints, the label placer (`layout/bake.py`) and the camera solver (`layout/camera.py`) |
+| `time` | expressions (`time/expr.py`), tracks, the parameter graph (`time/compile.py`), easing, narration and the choreography verbs (`time/verbs.py`) |
+| `layout` | the bake (`layout/bake.py`): linear constraints (`layout/solver.py`), the label placer (`layout/labels.py`) and the camera solver (`layout/camera.py`) |
 | `inspect` | what is on screen, lint rules (`inspect/lint.py`) and taste rules (`inspect/aesthetic.py`) |
 | `render` | OpenGL passes, GPU kernels (`render/gpu/kernels/`), the CPU kernel backend, post, encoding |
 | `domains` | object types: maths in `domains/<name>_math.py` (pure NumPy), drawing in `domains/<name>.py` |

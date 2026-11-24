@@ -9,10 +9,6 @@ import argparse
 import json
 import sys
 
-# command -> (version it is planned for, help); none at the moment
-PLANNED: dict[str, tuple[int, str]] = {}
-
-EXIT_NOT_IMPLEMENTED = 2
 EXIT_TIER_TOO_LOW = 1
 EXIT_LINT_FAILED = 1
 
@@ -280,14 +276,6 @@ def _cmd_bench_frames(args: argparse.Namespace) -> int:
     return 0
 
 
-def _planned(name: str, milestone: int):
-    def run(_: argparse.Namespace) -> int:
-        print(f"phasor {name}: not implemented yet (Milestone {milestone})", file=sys.stderr)
-        return EXIT_NOT_IMPLEMENTED
-
-    return run
-
-
 def build_parser() -> argparse.ArgumentParser:
     from phasor import __version__
     from phasor.render.job import PRESETS
@@ -396,10 +384,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     for ep in entry_points(group="phasor.commands"):
         ep.load()(sub)
-    for name, (milestone, help_) in PLANNED.items():
-        sp = sub.add_parser(name, help=f"{help_} (Milestone {milestone})")
-        sp.add_argument("args", nargs=argparse.REMAINDER)
-        sp.set_defaults(func=_planned(name, milestone))
     return p
 
 

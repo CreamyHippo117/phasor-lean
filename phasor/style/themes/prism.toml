@@ -204,7 +204,7 @@ ease = "in_out"
 duration = 2.4
 ease = "smoother"
 
-# The motion verbs added after the roadmap: an equation becoming the next, a shape becoming
+# The later motion verbs: an equation becoming the next, a shape becoming
 # another, text writing in, a point travelling a curve, quick emphasis, and a value swept.
 [motion.transform]
 duration = 1.3
