@@ -230,6 +230,22 @@ def _stroke_colors(look: str, glow: str):
     return [cmd.get("colors") for kind, cmd in c.commands if kind == "mesh"]
 
 
+def test_objects_a_verb_makes_get_the_look_too():
+    """A ``sweep`` readout and a ``circumscribe`` ring are dressed like objects the script
+    added, so the scene's generated code rebuilds the same document."""
+    from phasor import Dot, fourier
+
+    s = Scene("v", look="prism_everywhere", passes=None)
+    s.add(Dot(id="point", pos=(0, 0)))
+    s.add(fourier.PartialSum(id="wave", kind="square", terms=2, pos=(0, -2, 0)))
+    s.marker("go", 1.0)
+    s.at("go").sweep("wave.terms", 9)
+    s.at("go").circumscribe("point")
+    objs = {o.id: o for o in s.engine.document.objects}
+    assert objs["wave.readout"].style.get("glow") == "soft"  # the look's counter default
+    assert objs["point.ring"].style.get("glow") == "soft"  # its callout default
+
+
 def test_prism_everywhere_runs_the_hue_along_glowing_strokes_only():
     glowing = _stroke_colors("prism_everywhere", "strong")
     assert glowing and glowing[0] is not None

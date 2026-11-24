@@ -278,12 +278,13 @@ def test_exit_demo_renders_at_4k():
     e = load(DEMO)
     frame = e.frame(2.5, (3840, 2160))
     assert frame.shape == (2160, 3840, 4) and frame.max() <= 1.0 and np.isfinite(frame).all()
-    # The loop (radius 0.7 around +i at t = 2.5) glows: its rim is near white, and the plane
-    # just outside it is lit by the bloom compared with the same place at t = 0.
+    # The loop (radius 0.7 around +i at t = 2.5) glows: its rim is bright (the prism look
+    # runs a hue along it, so which channel peaks depends on where), and the plane just
+    # outside it is lit by the bloom compared with the same place at t = 0.
     px = 2160 / 4.5  # pixels per unit
     cx_, cy = 1920, round(1080 - 1.0 * px)
     rim = frame[cy, round(cx_ + 0.7 * px)]
-    assert rim[0] > 0.95 and rim[1] > 0.95 and rim[2] > 0.5  # orange glowing towards white
+    assert rim[:3].max() > 0.95 and rim[:3].sum() > 1.5
     early = e.frame(0.0, (3840, 2160))
     near = (cy, round(cx_ + 0.8 * px))
     assert frame[near][:3].sum() > early[near][:3].sum()

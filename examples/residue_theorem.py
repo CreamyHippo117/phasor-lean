@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from phasor import Dot, Line, Scene, Text, cx
+from phasor import Dot, Equation, Line, Scene, Text, cx
 
 SCRIPT = """
 [[intro]] Here is the function one over z squared plus one.
@@ -22,24 +22,24 @@ Only the pole inside the loop counts [[residue]].
 Its residue is minus i over two [[res_value]], so the integral equals pi [[integral]].
 """
 
-s = Scene("residue_theorem")
+# prism_field: the prism look for a scene on a glowing field (the field more see-through,
+# the equations drifting a little less)
+s = Scene("residue_theorem", look="prism_field")
 s.set("camera.height", 4.5)
 
 s.add(cx.DomainColoring(id="plane", function="1/(z**2 + 1)", size=(8.0, 4.5)))
-s.add(Text(id="title", text="f(z) = 1 / (z^2 + 1)", pos=(8 / 9, 0.08), layer="overlay",
-           style={"size": "title"}))  # fmt: skip
-for name, y, text in (("pole_top", 1.0, "i"), ("pole_bottom", -1.0, "-i")):
+s.add(Equation(id="title", parts=(r"$f(z) = \dfrac{1}{z^2 + 1}$",), pos=(-2.4, 1.8, 0.0)))
+for name, y, text in (("pole_top", 1.0, "$i$"), ("pole_bottom", -1.0, "$-i$")):
     s.add(Dot(id=name, pos=(0, y), r=0.07, style={"color": "highlight"}, tags=["key"]))
-    s.add(Text(id=f"{name}.label", text=text, style={"size": "math"}))
-    s.constrain(f"label({name}) near {name}")
+    s.add(Text(id=f"{name}.label", text=text, style={"size": "title"}))
+    s.constrain(f"label({name}) near {name} gap 0.15")
 ring = [(0.55 * np.cos(a), 1 + 0.55 * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 161)]
-s.add(
-    Line(id="loop", points=ring, style={"color": "highlight", "stroke": "bold", "glow": "strong"})
-)
-s.add(Text(id="loop.label", text="Res = -i/2"))
+s.add(Line(id="loop", points=ring, style={"color": "highlight"}))
+s.add(Text(id="loop.label", text="Res = -i/2", style={"color": "highlight"}))
 s.constrain("label(loop) near loop")
-s.add(Text(id="result", text="integral around the loop = 2 pi i (-i/2) = pi", pos=(8 / 9, 0.92),
-           layer="overlay"))  # fmt: skip
+s.add(Equation(id="result", pos=(0.0, -1.8, 0.0),
+               parts=(r"$\oint f\,dz = 2\pi i \cdot$", r"$(-i/2)$", r"$= \pi$"),
+               colors=("primary", "highlight", "secondary")))  # fmt: skip
 
 s.narrate(SCRIPT)
 s.at("intro").reveal("plane", "title")

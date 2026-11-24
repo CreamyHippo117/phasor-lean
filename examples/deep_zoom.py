@@ -14,11 +14,11 @@ from phasor import Scene, Text, cx
 
 SPIRAL = "-0.7756837680090537974694835039347410457282 0.1364673682946901247332744096178487651978"
 
-s = Scene("deep_zoom", look="glow")
+s = Scene("deep_zoom", look="prism")  # the set dark, its edge glowing (fractal_glow)
 s.set("camera.center", (0.0, 0.0, 0.0))
 s.set("camera.height", 4.5)
 s.add(cx.Fractal(id="set", center=SPIRAL, pos=(0, 0, 0), size=(8, 4.5), max_iter=3000,
-                 steady=True, preset="ocean"))  # fmt: skip
+                 steady=True))  # fmt: skip
 s.add(Text(id="depth", text="10^30 times closer", pos=(0, -1.8, 0), style={"size": "title"}))
 
 s.marker("dive", 1.0)

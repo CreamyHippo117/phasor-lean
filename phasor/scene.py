@@ -95,7 +95,7 @@ class At:
                                    f"{sorted(compiled.time_map.markers)}") from None  # fmt: skip
         motion = getattr(_verbs.Verbs(compiled, engine.state_at(t), at), name)(*args, **kwargs)
         if motion.ops:
-            self._scene._apply(list(motion.ops))
+            self._scene._apply([self._scene._with_look(op) for op in motion.ops])
         self._end = max(self._end, motion.end)
         return self
 
@@ -231,6 +231,17 @@ class Scene:
 
     def _apply(self, op: Any) -> None:
         self.engine.apply(op, origin="script").raise_for_errors()
+
+    def _with_look(self, op: Any) -> Any:
+        """An ``add_object`` op from a verb (a ``circumscribe`` ring, a ``sweep`` readout)
+        with the scene's look filled in, as ``add`` does: the scene's code rebuilds the same."""
+        if self.look is None or not (isinstance(op, dict) and op.get("op") == "add_object"):
+            return op
+        spec = op["object"]
+        params, style = self.look.fill(spec["type"], dict(spec.get("params", {})),
+                                       dict(spec.get("style", {})),
+                                       self.engine.document.meta.palette)  # fmt: skip
+        return {**op, "object": {**spec, "params": params, "style": style}}
 
     def add(self, obj: ObjectBase) -> ObjectBase:
         """Add an object: ``s.add(Dot(id="dot", pos=(1, 2)))``. Returns it for chaining.
