@@ -5,11 +5,13 @@ ordinary linter stays about problems, these are about taste. Every threshold is 
 ``[lint]`` entry, so your taste can move them.
 
 | code            | fires when                                                              |
-| focal_point     | a beat has no highlighted object, or more than one                      |
-| color_restraint | more saturated hues on screen than the theme allows (the phase wheel    |
-|                 | and the magnitude ramp are exempt: there, hue carries meaning)          |
+| focal_point     | with two or more objects, a beat has no highlighted one, or several     |
+|                 | (a lone object is the focal point)                                      |
+| color_restraint | more saturated flat-paint hues on screen than the theme allows (anything|
+|                 | colored through a colormap is not counted: there, hue carries meaning)  |
 | glow_clip       | too many pixels blow out to flat white (needs a renderer)               |
-| density         | the content fills too little or too much of the frame                   |
+| density         | the content fills too little, or (two or more objects) too much of the |
+|                 | frame; one object alone may fill it                                     |
 | motion_rhythm   | unrelated objects start different motions within the same short window  |
 | margin          | content crowds the outer safe margin of the frame                       |
 | stroke_mix      | more stroke weights on screen than the theme allows                     |
@@ -69,14 +71,10 @@ def _lut_hues(lut) -> set[int]:
     return {b for b in set(bins) - {None} if bins.count(b) >= LUT_SHARE * len(bins)}  # type: ignore[arg-type]
 
 
-# Colormaps whose hue is read as a quantity: a function's phase, a field's strength.
-MEANINGFUL = ("phase", "magnitude")
-
-
 def hues_on_screen(state: SceneState, shown: set[str]) -> set[int]:
-    """Saturated hues of what is drawn: paint colors, and the colors of ramps and restrained
-    wheels. The phase wheel and the magnitude ramp are left out: there, hue is how a
-    function's phase or a field's strength is *read*."""
+    """Saturated hues of what is drawn in flat paint. Whatever is colored through a colormap
+    is left out: there, hue encodes a quantity (phase, strength, position along a curve,
+    which tile) and keeps the whole wheel."""
     hues: set[int] = set()
     for obj in state.objects:
         if obj.id not in shown or obj.params.opacity < 0.1:
@@ -87,8 +85,6 @@ def hues_on_screen(state: SceneState, shown: set[str]) -> set[int]:
         if getattr(obj.params, "color_by_size", None) is False:
             cm = None  # arrows not colored by size show their paint color
         if cm is not None:
-            if obj.roles.get("colormap") not in MEANINGFUL:
-                hues |= _lut_hues(cm)
             continue
         color = obj.style.get("color")
         if color is not None and obj.impl.semantics(state).get("kind") != "label":
@@ -141,9 +137,9 @@ def rules(
         if not content:
             continue  # nothing yet: a blank beat is not "empty", it is not there yet
 
-        # focal_point: exactly one thing the eye should land on
+        # focal_point: exactly one thing the eye should land on (when there is more than one)
         highlighted = tuple(o.id for o in non_label if o.roles.get("color") == "highlight")
-        if non_label and len(highlighted) != 1:
+        if len(non_label) > 1 and len(highlighted) != 1:  # a lone object is the focal point
             if not highlighted:
                 add("focal_point", (), t, "none")
             else:
@@ -158,7 +154,7 @@ def rules(
         share = _occupied(state, runner, content)
         if share < th["density_min"]:
             add("density", (), t, "empty", share=share)
-        elif share > th["density_max"]:
+        elif share > th["density_max"] and len(non_label) != 1:  # one animation owns the stage
             add("density", (), t, "crowded", share=share)
 
         # glow_clip: light far beyond what the tone map can hold, before bloom (needs pixels)
@@ -218,7 +214,7 @@ def _make(c: Compiled, plan: Plan, th, code: str, ids: tuple[str, ...], variant:
     if code == "color_restraint":
         return Issue(
             code,
-            f"{info['hues']} saturated hues on screen {when} (limit {th['hues']:g})",
+            f"{info['hues']} saturated paint hues on screen {when} (limit {th['hues']:g})",
             "warning",
             ids,
             times=ts,

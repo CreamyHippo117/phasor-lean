@@ -31,7 +31,7 @@ from phasor.core.objects import Bounds, DrawContext, ObjectBase, ParamsBase, Pas
 from phasor.core.state import SceneState
 from phasor.core.values import Vec3
 from phasor.domains import waves_math as wm
-from phasor.domains.heatmap import AMBIENT, shade_values, wheel_colour
+from phasor.domains.heatmap import AMBIENT, Recipe, field_pixels, wheel_recipe
 from phasor.domains.strokes import disc_batch, polyline, with_alpha
 
 MAX_SOURCES = 64
@@ -168,43 +168,32 @@ class _WaveField(ObjectBase):
         # brightness against the sources' total amplitude a wavelength away, so two sources
         # and eight light the field alike; tanh keeps the strongest parts from clipping
         g = p.gain * math.sqrt(lam) / max(float(amps.sum()), 1e-9)
-        pos, neg = np.asarray(me.style["positive"][:3]), np.asarray(me.style["negative"][:3])
-        bg = np.asarray(state.background[:3], dtype=np.float64)
-        wheel = wheel_colour(me.style["colormap"], p) if p.hue_cycles > 0 else None
         share = p.blend if p.mode == "field" else 1.0 - p.blend  # of the intensity picture
+        # The signal: tanh(g * field), blended by ``share`` with the intensity, which goes
+        # as |A|^2: (tanh of the envelope) squared. Its level: the field runs -1..1 (troughs
+        # to crests, silence in the middle), the intensity 0..1 (silence to loud), so it
+        # uses the whole range too; blended in between.
+        how = {"transform": "wave", "gain": g, "share": share, "level": "signed",
+               "weight": "abs" if glow > 1 else None}  # fmt: skip
+        if p.hue_cycles > 0:
+            # read downward from the colormap's warm end: crests (and loud places) warm,
+            # troughs cool, the quiet middle between them
+            recipe = wheel_recipe(me.style["colormap"], p, hue_of="inverse", **how)
+        else:
+            recipe = Recipe(colour="sign", positive=me.style["positive"][:3],
+                            negative=me.style["negative"][:3], mix=True, **how)  # fmt: skip
 
-        def level(s: np.ndarray) -> np.ndarray:
-            # the field runs -1..1 (troughs to crests, silence in the middle); the intensity
-            # 0..1 (silence to loud), so it uses the whole range too; blended in between
-            return (1.0 - share) * (0.5 + 0.5 * s) + share * s
-
-        def pixels(pw: int, ph: int, center: tuple[float, float], height: float) -> np.ndarray:
+        def wave(tile, center: tuple[float, float], height: float):
             from phasor.render import gpu
 
-            raw = gpu.render("wave_field", pw, ph, sources=table, wavenumber=k, omega_t=wt,
-                             center=(corner[0] + center[0], corner[1] + center[1]),
-                             height=height, core=CORE * lam, edge=FRONT * lam)  # fmt: skip
-            field = raw[..., 0].astype(np.float64)
-            envelope = np.sqrt(2.0 * np.maximum(raw[..., 1].astype(np.float64), 0.0))  # |A|
-            s = np.tanh(g * field)
-            if share > 0:  # the intensity goes as |A|^2: (tanh of the envelope) squared
-                s = (1.0 - share) * s + share * np.tanh(g * envelope) ** 2
-            if wheel is not None:
-                # read downward from the colormap's warm end: crests (and loud places)
-                # warm, troughs cool, the quiet middle between them
-                rgb = wheel(1.0 - level(s))
-            else:
-                tint = np.where(s[..., None] >= 0, pos, neg)
-                rgb = bg + (tint - bg) * np.abs(s)[..., None]
-            half_w = height * pw / ph / 2
-            xs = center[0] + (np.arange(pw) + 0.5) / pw * 2 * half_w - half_w
-            ys = center[1] + (0.5 - (np.arange(ph) + 0.5) / ph) * height  # row 0 = top
-            return shade_values(s, rgb, xs / p.size[0], ys / p.size[1], p.size, level=level,
-                                isolines=p.isolines, weight=np.abs if glow > 1 else None,
-                                background=state.background, ambient=p.ambient, fade=p.fade,
-                                contrast=p.contrast)  # fmt: skip
+            return gpu.run("wave_field", tile, sources=table, wavenumber=k, omega_t=wt,
+                           center=(corner[0] + center[0], corner[1] + center[1]),
+                           height=height, core=CORE * lam, edge=FRONT * lam)  # fmt: skip
 
-        return pixels
+        # the field stays where the kernel left it and is coloured there
+        return field_pixels(wave, p.size, recipe, isolines=p.isolines,
+                            background=state.background, ambient=p.ambient, fade=p.fade,
+                            contrast=p.contrast)  # fmt: skip
 
     def _beacons(self, ctx: DrawContext, state: SceneState) -> None:
         """Each source that has started as a beacon, its light rising and falling with the

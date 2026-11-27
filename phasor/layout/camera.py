@@ -16,12 +16,28 @@ solver's until its first motion starts; that motion then starts from the solved 
 - Solved at markers, the ends of transitions and a 1 Hz grid, joined with a monotone
   cubic (PCHIP, so it never overshoots), sampled into the bake's key times, and checked
   again at every one of them. What still fails becomes an ``unsolved`` issue with times.
+- ``avoid_occlusion`` rests while its object is hidden: no cost, no
+  depth buffer, no ``unsolved``. The camera is then a blend of two paths, one solved
+  without that protection and one with it, eased from one to the other over a lead-in
+  before the object appears and a lead-out after it goes (``_Blend``; the theme's
+  ``[motion] camera_lead`` and ``camera_speed``), so it stays C1 and is in a protecting
+  view by the time the object shows. Where there is no room for a slow enough swing (the
+  object appears soon after the start, or is hidden only briefly), it does not rest.
 
-Pure: depends on (compiled document, plan, oracle), like the rest of the bake.
+Pure: depends on (compiled document, plan, oracle), like the rest of the bake. Each
+(time, camera, object) is measured on the depth buffer once (``_Seen``).
+
+Global, not per key: the scale of the search (``_Vars``: where the target may go, how far
+the camera may be) comes from every goal object at every solve time, each solve is pulled
+toward the continuation of the ones before, and the refine rounds run over the whole
+timeline until nothing fails anywhere. An edit at any time can change the camera at every
+time (a new segment adds solve times, which moves the mean of the spheres in its last
+bits), so a bake with camera goals is never resumed from an earlier one.
 """
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -34,6 +50,7 @@ from phasor.core.constraints import Goal
 from phasor.core.issues import Issue
 from phasor.core.spatial import Camera, OrbitCameraParams, perspective_camera
 from phasor.core.state import SceneState
+from phasor.core.values import geo_lerp
 from phasor.layout.geometry import is_backdrop, occludes
 from phasor.layout.plan import Plan, Rule
 from phasor.time.compile import Compiled, evaluate, sway
@@ -168,8 +185,10 @@ def _project(cam: Camera, s: Sphere) -> tuple[float, float, float, float] | None
 class Problem:
     """The cost of a camera at one time: every goal, weighted by its rule's priority."""
 
-    def __init__(self, c: Compiled, plan: Plan, state: SceneState) -> None:
+    def __init__(self, c: Compiled, plan: Plan, state: SceneState,
+                 resting: frozenset[str] = frozenset()) -> None:  # fmt: skip
         self.c, self.plan, self.state = c, plan, state
+        self.resting = resting  # avoid_occlusion objects not protected now (``_Active``)
         self.aspect = state.aspect
         th = c.theme.camera
         self.fill, self.margin, self.thirds_w = th["fill"], th["margin"], th["thirds"]
@@ -225,7 +244,8 @@ class Problem:
             cost += W_MIN_SIZE * max(0.0, g.value - _size(box, self.aspect)) ** 2
         elif g.kind == "avoid_occlusion":
             for i in g.ids:
-                cost += W_OCCLUDE * self._blocked(cam, i)
+                if i not in self.resting:
+                    cost += W_OCCLUDE * self._blocked(cam, i)
         return w * cost
 
     def _blocked(self, cam: Camera, i: str) -> float:
@@ -300,12 +320,12 @@ class _Handoff:
                 continue
             start = np.asarray(self.start[n], dtype=np.float64)
             init = np.asarray(tr.initial, dtype=np.float64)
-            w = (
-                1.0
-                if keep or t <= s.t0
-                else 1.0 - (s.ease(min((t - s.t0) / max(s.t1 - s.t0, 1e-9), 1.0)))
-            )
-            v = np.asarray(tr.value_at(t), dtype=np.float64) + (start - init) * w
+            e = s.ease(min((t - s.t0) / max(s.t1 - s.t0, 1e-9), 1.0)) if t > s.t0 else 0.0
+            if s.geometric and not keep and t < s.t1 and start.ndim == 0:  # a zoom, by factors
+                v = np.asarray(geo_lerp(float(start), float(s.to), e), dtype=np.float64)
+            else:
+                w = 1.0 if keep or t <= s.t0 else 1.0 - e
+                v = np.asarray(tr.value_at(t), dtype=np.float64) + (start - init) * w
             upd[n] = tuple(float(a) for a in v) if v.ndim else float(v)
         return OrbitCameraParams(**{**p.model_dump(), **upd}) if upd else p
 
@@ -352,6 +372,8 @@ class Solution:
     issues: tuple[Issue, ...]
 
 
+SWING_HZ = 5.0  # the camera is joined at this rate inside a lead-in or lead-out
+BLEND_ROUNDS = 3  # solve the protected paths again with longer leads at most this often
 REFINE_ROUNDS = 6  # 3 was too few for riemann_sqrt with estimated narration timing (2026-11-21)
 
 
@@ -360,15 +382,24 @@ def solve(
     plan: Plan,
     times: tuple[float, ...],
     hidden: Callable[[SceneState, str], float] | None = None,
+    shown: dict[str, tuple[bool, ...]] | None = None,
 ) -> Solution:
     """Camera values for the free parameters at every one of ``times`` (the bake's keys).
 
     ``hidden(state, id)`` is the stage 2 check: the share of ``id`` hidden by what is in
-    front of it, measured on a real (or analytic) depth buffer.
+    front of it, measured on a real (or analytic) depth buffer. ``shown[id]`` says at which
+    of ``times`` an ``avoid_occlusion`` object is shown (``bake.shown_times``); one left out
+    counts as always shown. See ``_Active`` for what is protected when.
     """
     cam_id = c.doc.timeline.camera
     keys = solve_times(c)
     occl = [(r, g) for r, g in plan.goals if g.kind == "avoid_occlusion"]
+    motion = c.theme.motion
+    hand = _Handoff(c, plan)
+    # A handoff motion starts from the value solved where it starts, so the camera there
+    # must not be blended afterwards: with one, nothing rests (as before 2026-11-26).
+    active = _Active(times, {} if hand.tracks else shown or {})
+    watched = sorted({i for _, g in occl for i in g.ids})
     # The goals' objects over the whole timeline set the scale of the search (where the
     # target may go, how far the camera may be), so a moving object can be followed.
     allsph = [sp for t in keys for sp in Problem(c, plan, evaluate(c, t)).spheres.values()]
@@ -377,14 +408,19 @@ def solve(
     th = c.theme.camera
     chosen = plan.camera_free + plan.camera_handoff
     vars_ = _Vars(chosen, center, radius, (th["min_elevation"], th["max_elevation"]))
-    hand = _Handoff(c, plan)
+    seen = None if hidden is None else _Seen(c, chosen, hidden)
     prior = vars_.encode(OrbitCameraParams(**{**_defaults(), "target": tuple(vars_.center)}))
     angles = np.array([n in ("azimuth", "elevation") for n in vars_.names], dtype=float)
 
-    def solve_at(t: float, near: np.ndarray | None, last: np.ndarray | None = None) -> np.ndarray:
-        """Best camera at ``t``; ``near`` (the neighbor's solution) anchors smoothness."""
+    def solve_at(t: float, near: np.ndarray | None, last: np.ndarray | None = None,
+                 guard: Callable[[str, float], bool] | None = None) -> np.ndarray:  # fmt: skip
+        """Best camera at ``t``; ``near`` (the neighbor's solution) anchors smoothness.
+        ``guard(id, t)`` says which avoid_occlusion objects it protects (default: those
+        shown at ``t``)."""
+        guard = guard or active.on
         pre = evaluate(c, t)
-        prob = Problem(c, plan, pre)
+        resting = frozenset(i for i in watched if not guard(i, t))
+        prob = Problem(c, plan, pre, resting)
         base = _base(c, pre)
         x0 = vars_.encode(base) if near is None else near
         if not vars_.names:  # nothing to choose: the goals are only checked
@@ -404,30 +440,54 @@ def solve(
         best = min((minimize(f, s0, method="L-BFGS-B", bounds=vars_.bounds()) for s0 in starts),
                    key=lambda r: r.fun)  # fmt: skip
         x = best.x
-        if near is not None and _check(c, plan, t, hand.pin(vars_.decode(x, base), t), None):
+        if near is not None and _check(c, plan, t, hand.pin(vars_.decode(x, base), t), None,
+                                       active):  # fmt: skip
             # Warm start was not enough (something moved fast): search from several starts.
             again = min((minimize(f, s0, method="L-BFGS-B", bounds=vars_.bounds())
                          for s0 in _starts(x, vars_.names)), key=lambda r: r.fun)  # fmt: skip
             if again.fun < best.fun:
                 x = again.x
-        if hidden is not None and occl:
-            x = _stage2(c, f, x, vars_, hand.pin, base, occl, t, hidden)
+        now = [(PRIORITY[r.spec.priority], i) for r, g in occl for i in g.ids
+               if i not in resting]  # fmt: skip
+        if seen is not None and now:
+            x = _stage2(f, x, vars_, hand.pin, base, now, t, seen)
         return x
 
-    # Smoothness penalizes jerks, not motion: each key is pulled toward the straight-line
-    # continuation of the two before it, so following a moving object costs nothing.
-    solved: dict[float, np.ndarray] = {}
-    hist: list[tuple[float, np.ndarray]] = []
-    for t in keys:
-        near = None
-        if len(hist) == 1:
-            near = hist[-1][1]
-        elif len(hist) >= 2:
-            (ta, xa), (tb, xb) = hist[-2], hist[-1]
-            near = xb + (xb - xa) * ((t - tb) / (tb - ta)) if tb > ta else xb
-        solved[t] = solve_at(t, near, hist[-1][1] if hist else None)
-        hist.append((t, solved[t]))
-        hand.reached(t, lambda t=t: vars_.decode(solved[t], _base(c, evaluate(c, t))))
+    def forward(ks, hist: list, guard, record: bool = False) -> dict[float, np.ndarray]:
+        """Solve ``ks`` in order, continuing ``hist`` (extended in place). Smoothness
+        penalizes jerks, not motion: each key is pulled toward the straight-line
+        continuation of the two before it, so following a moving object costs nothing."""
+        out: dict[float, np.ndarray] = {}
+        for t in ks:
+            near = None
+            if len(hist) == 1:
+                near = hist[-1][1]
+            elif len(hist) >= 2:
+                (ta, xa), (tb, xb) = hist[-2], hist[-1]
+                near = xb + (xb - xa) * ((t - tb) / (tb - ta)) if tb > ta else xb
+            out[t] = solve_at(t, near, hist[-1][1] if hist else None, guard)
+            hist.append((t, out[t]))
+            if record:
+                hand.reached(t, lambda t=t: vars_.decode(out[t], _base(c, evaluate(c, t))))
+        return out
+
+    # The free path: protecting only the objects that never rest. Then, around every
+    # stretch in which a resting object is shown, the protected path, started from the
+    # free one; the camera follows the one blended into the other (``_Blend``).
+    free_hist: list = []
+    free = forward(keys, free_hist, lambda i, t: i not in active.resting, record=True)
+    blend = _Blend(active, keys, motion["camera_lead"], motion["camera_speed"] / 45.0)
+    for round_ in range(BLEND_ROUNDS + 1):
+        prot: dict[float, np.ndarray] = {}
+        for s, e in blend.segments():
+            ks = [k for k in keys if s - 1e-9 <= k <= e + 1e-9]
+            if not ks:
+                continue
+            hist = [h for h in free_hist if h[0] < ks[0] - 1e-9]
+            prot.update(forward(ks, hist, blend.guard))
+        if round_ == BLEND_ROUNDS or not blend.widen(free, prot):
+            break
+    solved, derived = blend.join(free, prot, times)
 
     def curve() -> np.ndarray:
         ks = sorted(solved)
@@ -443,14 +503,17 @@ def solve(
         bad = [
             t
             for t, x in zip(times, at, strict=True)
-            if t not in solved
-            and _check(c, plan, t, hand.pin(vars_.decode(x, _base(c, evaluate(c, t))), t), hidden)
+            if (t not in solved or t in derived)
+            and _check(
+                c, plan, t, hand.pin(vars_.decode(x, _base(c, evaluate(c, t))), t), seen, active
+            )
         ]
         if not bad or not vars_.names:
             break
         for t, x in zip(times, at, strict=True):
             if t in bad:
                 solved[t] = solve_at(t, x)
+                derived.discard(t)
         at = curve()
 
     values: dict[str, list] = {f"{cam_id}.{p}": [] for p in chosen}
@@ -460,7 +523,7 @@ def solve(
         for name in chosen:
             v = getattr(p, name)
             values[f"{cam_id}.{name}"].append(tuple(v) if isinstance(v, tuple) else float(v))
-        for index, why, ids in _check(c, plan, t, p, hidden):
+        for index, why, ids in _check(c, plan, t, p, seen, active):
             failures.setdefault((index, why), (ids, []))[1].append(t)
     issues = []
     for (index, why), (ids, ts) in sorted(failures.items()):
@@ -476,15 +539,201 @@ def solve(
     return Solution(tuple(times), {k: tuple(v) for k, v in values.items()}, tuple(issues))
 
 
-def _stage2(c, f, x, vars_, pin, base, occl, t, hidden) -> np.ndarray:
-    """Check avoid_occlusion on the depth buffer; if hidden, try nearby cameras."""
-    cam_id = c.doc.timeline.camera
+class _Active:
+    """When an ``avoid_occlusion`` goal protects its object.
+
+    While the object is hidden (opacity x dim is 0 at a key and at the keys on either side,
+    ``bake.shown_times``) there is nothing to protect: the goal adds no cost, draws no depth
+    buffer and reports nothing. An object with no ``shown`` entry, or shown throughout,
+    never rests; the others are ``resting``, shown in their ``runs`` (first and last key of
+    each stretch), and ``_Blend`` decides how the camera eases into and out of those.
+    """
+
+    def __init__(self, times, shown: dict[str, tuple[bool, ...]]) -> None:
+        self.runs: dict[str, list[tuple[float, float]]] = {}
+        ts = np.asarray(times, dtype=np.float64)
+        for i, mask in shown.items():
+            on = np.array(mask, dtype=bool)
+            if on.all():
+                continue
+            edges = np.flatnonzero(np.diff(np.concatenate(([0], on.astype(int), [0]))))
+            self.runs[i] = [(float(ts[a]), float(ts[b - 1])) for a, b in edges.reshape(-1, 2)]
+        self.resting = frozenset(self.runs)
+
+    def on(self, i: str, t: float) -> bool:
+        """Whether ``i`` is protected at ``t``: shown there, or it never rests."""
+        if i not in self.resting:
+            return True
+        return any(a - 1e-9 <= t <= b + 1e-9 for a, b in self.runs[i])
+
+
+def _smoothstep(u: float) -> float:
+    u = min(max(u, 0.0), 1.0)
+    return u * u * (3.0 - 2.0 * u)
+
+
+class _Blend:
+    """The camera path where ``avoid_occlusion`` objects rest: the free path F (solved
+    protecting only what never rests) and, around each stretch a resting object is shown
+    in, the protected path P (solved protecting it from the start of a lead-in on, started
+    from F there). The camera is F + w (P - F): w is 1 while anything resting is shown,
+    so there the camera is P and every goal holds as it always did; it rises from 0 along
+    a smoothstep over a lead-in before each stretch and falls back over a lead-out after.
+    F, P and w are C1, so the camera is too, and it is at P before the object appears.
+
+    A lead lasts at least the theme's ``[motion] camera_lead`` seconds, longer when P and
+    F are far apart, so the swing stays under ``camera_speed`` (a smoothstep's peak speed
+    is 1.5 x its mean); ``widen`` measures that and the paths are solved again. The ramps
+    of several stretches join as 1 - prod(1 - w_k), which is C1 too (a max would kink).
+    """
+
+    def __init__(self, active: _Active, keys, lead: float, speed: float) -> None:
+        self.active, self.lead, self.speed = active, lead, speed
+        self.first, self.last = keys[0], keys[-1]
+        self.runs = [[i, a, b, lead, lead] for i in sorted(active.resting)
+                     for a, b in active.runs[i]]  # fmt: skip
+
+    def _start(self, r) -> float:
+        return r[1] if r[1] <= self.first + 1e-9 else max(r[1] - r[3], self.first)
+
+    def _end(self, r) -> float:
+        return r[2] if r[2] >= self.last - 1e-9 else min(r[2] + r[4], self.last)
+
+    def segments(self) -> list[tuple[float, float]]:
+        """Where P is needed (lead-in to lead-out of every stretch), overlapping ones merged."""
+        out: list[list[float]] = []
+        for s, e in sorted((self._start(r), self._end(r)) for r in self.runs):
+            if out and s <= out[-1][1] + 1e-9:
+                out[-1][1] = max(out[-1][1], e)
+            else:
+                out.append([s, e])
+        return [(s, e) for s, e in out]
+
+    def guard(self, i: str, t: float) -> bool:
+        """What P protects: what never rests, and each resting object from its lead-in on."""
+        if i not in self.active.resting:
+            return True
+        return any(r[0] == i and self._start(r) - 1e-9 <= t <= r[2] + 1e-9 for r in self.runs)
+
+    def weight(self, t: float) -> float:
+        rest = 1.0
+        for r in self.runs:
+            _, a, b, _, _ = r
+            if t < a:
+                s = self._start(r)
+                w = _smoothstep((t - s) / (a - s)) if a - s > 1e-9 else 0.0
+            elif t <= b:
+                w = 1.0
+            else:
+                e = self._end(r)
+                w = _smoothstep((e - t) / (e - b)) if e - b > 1e-9 else 0.0
+            rest *= 1.0 - w
+        return 1.0 - rest
+
+    def widen(self, free: dict, prot: dict) -> bool:
+        """Lengthen every lead whose swing (the largest |P - F| over its first or last
+        ``camera_lead`` seconds of the stretch) is too big for ``camera_speed``. A swing
+        with no room for that (before the first key, after the last) is not made: the
+        stretch is protected from the start (or to the end) instead, as it always was.
+        True if anything changed."""
+        changed = False
+        for r in self.runs:
+            a, b = r[1], r[2]
+            for k, lo, hi in ((3, a, min(b, a + self.lead)), (4, max(a, b - self.lead), b)):
+                room = (a - self.first) if k == 3 else (self.last - b)
+                if room <= 1e-9:
+                    continue
+                gap = max((float(np.abs(prot[t] - free[t]).max()) for t in prot
+                           if lo - 1e-9 <= t <= hi + 1e-9), default=0.0)  # fmt: skip
+                need = max(self.lead, 1.5 * gap / self.speed)
+                if need > room + 1e-9:
+                    r[1 if k == 3 else 2] = self.first if k == 3 else self.last
+                elif need > 1.1 * r[k]:
+                    r[k] = need
+                else:
+                    continue
+                changed = True
+        # A stretch hidden between two shown ones rests only if the camera spends at least
+        # as long free in it as swinging out and back: otherwise it would dip away and
+        # straight back, for nothing anyone can see. The two stretches become one.
+        merged = True
+        while merged:
+            merged = False
+            for r, q in itertools.pairwise(sorted(self.runs, key=lambda r: (r[0], r[1]))):
+                if r[0] == q[0] and q[1] - r[2] < 2.0 * (r[4] + q[3]):
+                    q[1], q[3] = r[1], r[3]
+                    self.runs.remove(r)
+                    merged = changed = True
+                    break
+        return changed
+
+    def join(self, free: dict, prot: dict, times) -> tuple[dict, set]:
+        """The camera at every solve key, and at SWING_HZ keys (on the bake's grid) inside
+        the ramps, so the joined path follows the S-curve instead of cutting its corners;
+        those are ``derived`` (from F and P, not solved), so the checks still look at them."""
+        solved = {}
+        for t, x in free.items():
+            w = self.weight(t)
+            solved[t] = x if w <= 0 else prot[t] if w >= 1 else x + w * (prot[t] - x)
+        derived: set[float] = set()
+        if not self.runs or len(free) < 2:
+            return solved, derived
+        fk = sorted(free)
+        f_curve = PchipInterpolator(np.array(fk), np.array([free[k] for k in fk]), axis=0)
+        for s, e in self.segments():
+            pk = sorted(k for k in prot if s - 1e-9 <= k <= e + 1e-9)
+            if len(pk) < 2:
+                continue
+            p_curve = PchipInterpolator(np.array(pk), np.array([prot[k] for k in pk]), axis=0)
+            for t in times:
+                if not (pk[0] < t < pk[-1]) or t in solved:
+                    continue
+                if abs(t * SWING_HZ - round(t * SWING_HZ)) > 1e-6:
+                    continue
+                w = self.weight(t)
+                if 0.0 < w < 1.0:
+                    x = f_curve(t)
+                    solved[t] = x + w * (p_curve(t) - x)
+                    derived.add(t)
+        return solved, derived
+
+
+class _Seen:
+    """The stage 2 measurement ``hidden(state, id)``, made once per (time, camera, object).
+
+    The refine rounds and the final check ask again about cameras already measured (a key
+    no round moved is checked in every round and once more at the end; a solved key is
+    measured by stage 2 and checked again). The scene at (t, camera) is a pure function of
+    the two (contract 3), so the answer is the same: it is kept, not rendered again.
+    """
+
+    def __init__(self, c: Compiled, names: tuple[str, ...],
+                 hidden: Callable[[SceneState, str], float]) -> None:  # fmt: skip
+        cam_id = c.doc.timeline.camera
+        self.c, self.hidden = c, hidden
+        self.paths = tuple((f"{cam_id}.{n}", n) for n in names)
+        self.shares: dict[tuple, float] = {}
+        self.last: tuple | None = None
+        self.state: SceneState | None = None
+
+    def __call__(self, t: float, p: OrbitCameraParams, object_id: str) -> float:
+        cam = tuple((path, getattr(p, n)) for path, n in self.paths)
+        key = (t, cam, object_id)
+        if key not in self.shares:
+            if self.last != (t, cam):
+                self.last, self.state = (t, cam), evaluate(self.c, t, dict(cam))
+            self.shares[key] = self.hidden(self.state, object_id)
+        return self.shares[key]
+
+
+def _stage2(f, x, vars_, pin, base, watch, t, seen: _Seen) -> np.ndarray:
+    """Check avoid_occlusion on the depth buffer; if hidden, try nearby cameras. ``watch``
+    is (priority weight, id) of every object a goal protects at ``t``."""
 
     def shares(y) -> list[tuple[float, float]]:
         """(priority weight, hidden share) of every object an avoid_occlusion goal names."""
         p = pin(vars_.decode(y, base), t)
-        state = evaluate(c, t, {f"{cam_id}.{n}": getattr(p, n) for n in vars_.free})
-        return [(PRIORITY[r.spec.priority], hidden(state, i)) for r, g in occl for i in g.ids]
+        return [(w, seen(t, p, i)) for w, i in watch]
 
     def clear(sh) -> bool:  # the same test as ``_check``: no object hidden past HIDDEN_OK
         return all(h <= HIDDEN_OK for _, h in sh)
@@ -523,16 +772,15 @@ def _nearby(x: np.ndarray, names: list[str]) -> list[np.ndarray]:
     return out
 
 
-def _check(c, plan, t, p, hidden) -> list[tuple[int, str, tuple[str, ...]]]:
+def _check(c, plan, t, p, seen: _Seen | None,
+           active: _Active) -> list[tuple[int, str, tuple[str, ...]]]:  # fmt: skip
     """Which goals fail at ``t`` with camera ``p``: (rule index, why, ids). Occlusion is
-    checked only when ``hidden`` is given."""
+    checked only when ``seen`` is given, and only while the object is shown."""
     pre = evaluate(c, t)
     prob = Problem(c, plan, pre)
     cam = prob.camera(p)
     lx = 1.0 - 2.0 * prob.margin / prob.aspect
     top, bottom = prob.top - 2.0 * prob.margin, prob.bottom + 2.0 * prob.margin
-    cam_id = c.doc.timeline.camera
-    state = None
     out = []
     for rule, g in plan.goals:
         bad: list[str] = []
@@ -547,19 +795,10 @@ def _check(c, plan, t, p, hidden) -> list[tuple[int, str, tuple[str, ...]]]:
             elif g.kind == "min_size" and (behind > 0 or _size(box, prob.aspect) < g.value * 0.9):
                 bad.append(i)
                 why = f"it is smaller than {g.value:g} of the frame"
-            elif g.kind == "avoid_occlusion" and hidden is not None:
-                if state is None:
-                    state = evaluate(
-                        c,
-                        t,
-                        {
-                            f"{cam_id}.{n}": getattr(p, n)
-                            for n in plan.camera_free + plan.camera_handoff
-                        },
-                    )
-                if hidden(state, i) > HIDDEN_OK:
-                    bad.append(i)
-                    why = "it is hidden behind something in front of it"
+            elif g.kind == "avoid_occlusion" and seen is not None and active.on(i, t) \
+                    and seen(t, p, i) > HIDDEN_OK:  # fmt: skip
+                bad.append(i)
+                why = "it is hidden behind something in front of it"
         if bad:
             out.append((rule.index, why, tuple(bad)))
     return out

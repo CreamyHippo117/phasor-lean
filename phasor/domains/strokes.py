@@ -241,13 +241,15 @@ def segment_batch(ctx: DrawContext, cam: Camera, a, b, width, *, colors, glow: f
 
 
 def disc_batch(ctx: DrawContext, cam: Camera, centers, radius, *, colors, glow: float = 1.0,
-               opacity: float = 1.0) -> None:  # fmt: skip
+               opacity: float = 1.0, segments: int = 12, soft: bool = False) -> None:  # fmt: skip
     """Many discs facing the camera in one draw call: ``centers`` (N, 3), ``radius`` world
-    units (one, or one per disc), ``colors`` one RGBA or (N, 4)."""
+    units (one, or one per disc), ``colors`` one RGBA or (N, 4), ``segments`` round each.
+    ``soft``: each disc's light falls linearly from its centre to nothing at its rim (a glow
+    splat rather than a flat dot)."""
     c = np.asarray(centers, dtype=np.float64).reshape(-1, 3)
     if len(c) == 0:
         return
-    seg = 12
+    seg = int(segments)
     ang = np.linspace(0, 2 * np.pi, seg, endpoint=False)
     r = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(c),))[:, None, None]
     ring = (np.cos(ang)[:, None] * cam.right + np.sin(ang)[:, None] * cam.up)[None] * r
@@ -258,6 +260,50 @@ def disc_batch(ctx: DrawContext, cam: Camera, centers, radius, *, colors, glow: 
     tris = (base[:, None, :] + tris[None]).reshape(-1, 3)
     cols = np.asarray(colors, dtype=np.float64)
     cols = np.broadcast_to(cols if cols.ndim == 2 else cols[None], (len(c), 4))
-    per_vertex = np.repeat(cols[:, None, :], seg + 1, axis=1).reshape(-1, 4)
+    per_vertex = np.repeat(cols[:, None, :], seg + 1, axis=1)
+    if soft:
+        per_vertex[:, 1:, 3] = 0.0
+    per_vertex = per_vertex.reshape(-1, 4)
     ctx.triangles(pos.reshape(-1, 3), tris, color=(1.0, 1.0, 1.0, opacity), glow=glow,
                   colors=np.ascontiguousarray(per_vertex))  # fmt: skip
+
+
+FLASH_HALO = 3.0  # a flashing point's halo, in point radii
+FLASH_HALO_LIGHT = 0.35  # the halo's light at the peak of the flash
+REST_GLOW = 0.3  # share of the glow role flashing points keep when not flashing
+
+
+def flash_points(ctx: DrawContext, cam: Camera, centers, radius, *, colors, flash=None,
+                 glow: float = 1.0, opacity: float = 1.0, swell: float = 0.0, white: float = 0.0,
+                 segments: int = 8) -> None:  # fmt: skip
+    """Glowing points of light that may flash: the one way a lattice of lights is drawn
+    (``sweep.SweepLattice``, ``nd.StarLattice``, ``ac.ImageSources``). ``centers`` (N, 3),
+    ``radius`` world units (one or one per point), ``colors`` (N, 4): each point's colour,
+    its alpha its light. ``flash`` (N,) 0-1 is the part of the light above the resting level
+    (``sweep_math.envelope`` gives both): a flashing point grows by ``swell * flash``, runs
+    white-hot by ``white * flash`` and wears a soft halo ``FLASH_HALO`` radii wide that sends
+    the whole ``glow`` role to the bloom, while the points themselves keep ``REST_GLOW`` of
+    it. Without ``flash`` the points are steady and shine with the whole role. Drawn far to
+    near (for blending), in at most two draw calls."""
+    c = np.asarray(centers, dtype=np.float64).reshape(-1, 3)
+    if not len(c):
+        return
+    order = np.argsort(-cam.depth(c), kind="stable")
+    c = c[order]
+    cols = np.array(np.broadcast_to(np.asarray(colors, dtype=np.float64), (len(order), 4)))[order]
+    r = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(order),))[order]
+    if flash is None:
+        disc_batch(ctx, cam, c, r, colors=cols, glow=glow, opacity=opacity, segments=segments)
+        return
+    f = np.broadcast_to(np.asarray(flash, dtype=np.float64), (len(order),))[order]
+    hot = (white * f)[:, None]
+    cols[:, :3] = cols[:, :3] * (1 - hot) + hot  # the flash runs white-hot
+    r = r * (1.0 + swell * f)
+    disc_batch(ctx, cam, c, r, colors=cols, glow=1.0 + REST_GLOW * (glow - 1.0), opacity=opacity,
+               segments=segments)  # fmt: skip
+    lit = f > 0.02
+    if lit.any():  # a soft halo round each flashing point, all its light to the bloom
+        halo = cols[lit].copy()
+        halo[:, 3] = FLASH_HALO_LIGHT * f[lit]
+        disc_batch(ctx, cam, c[lit], FLASH_HALO * r[lit], colors=halo, glow=glow,
+                   opacity=opacity, segments=segments + 2, soft=True)  # fmt: skip

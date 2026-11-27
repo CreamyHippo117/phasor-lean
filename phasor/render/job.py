@@ -132,6 +132,9 @@ def render_file(
         mux_audio(out, samples[first : first + round(count / fps * rate)], rate)
     return {
         "path": str(out), "size": size, "fps": fps, "frames": count, "encoder": writer.encoder,
-        "narration": bool(sound), "warnings": warnings,
+        "narration": bool(sound and engine.document.narration is not None),
+        "sounds": (len(engine.document.sound.beds) + len(engine.document.sound.cues)
+                   if sound else 0), "audio": bool(sound),
+        "warnings": warnings,
         "motion_blur": shutter > 0 and blur_samples > 1, "field_scale": field_scale,
     }  # fmt: skip

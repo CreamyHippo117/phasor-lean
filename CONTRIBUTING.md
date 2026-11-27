@@ -120,9 +120,12 @@ them needs a decision record in `docs/decisions/`.
 - Layout runs only inside `layout/bake.py`, and only `Engine` runs or applies the bake.
   Anything that draws or inspects takes `Engine.state_at(t)`.
 - A lint rule lives in `inspect/lint.py`, takes its threshold from the theme's `[lint]`
-  table, reports `times`, and offers a `fix` only when the fix is certain to be right. Test
+  table (sound rules from `[sound]`), reports `times`, and offers a `fix` only when the fix is certain to be right. Test
   new rules and layout features with and without OpenGL (`MODES` in `tests/test_lint.py`).
 - Taste rules live in `inspect/aesthetic.py` and run only with `aesthetic=True`.
+- A speed-up may change the `final` and `4k` pictures only where the eye cannot see it: every
+  8-bit value within 1 code value of before. A visible change is for the `draft` and `preview`
+  presets only.
 - Verbs live in `time/verbs.py`, take their timing from the theme's `[motion]`, and give
   the same result whatever order a script writes them in. Narrated scenes anchor every
   motion to a marker; `lint(strict=True)` checks it.

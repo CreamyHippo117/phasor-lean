@@ -2,11 +2,11 @@
 
 ``document_to_python(doc)`` writes a script that, run, builds the same scene: objects with
 their parameters, style roles and tags, the camera, markers, animations (as ``at(...).to``),
-constraints and controls. An object of a type defined in the scene's folder, or with
-updaters, is written as the document's own ``add_object`` op (ADR 0005). Narration blocks
-are not reproduced (their audio belongs to the voice module): a comment says so. Running the
-result and diffing it with the document gives no differences except narration
-(``tests/test_pycode.py``).
+constraints, controls, beds and cues (``s.bed``, ``s.cue``). An object of a type defined in
+the scene's folder, or with updaters, is written as the document's own ``add_object`` op
+(ADR 0005). The narration is written as the document's own ``set_narration`` op too: its
+timing and markers exactly, without speaking it again. Running the result and diffing it
+with the document gives no differences (``tests/test_pycode.py``).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from phasor.core.objects import is_builtin, registered_types
 from phasor.core.schema import Document, ExprSpec, MarkerRef
 
 # class module -> how the generated script reaches it
-_TOP = {"phasor.domains.basic", "phasor.domains.media"}  # from phasor import Dot, Image, ...
+_TOP = {"phasor.domains.basic", "phasor.domains.media", "phasor.domains.unfold"}  # Dot, Image, ...
 _ALIAS = {
     "phasor.domains.cx": "cx",
     "phasor.domains.acoustics": "ac",
@@ -32,6 +32,9 @@ _ALIAS = {
     "phasor.domains.dynamics": "dyn",
     "phasor.domains.convolution": "conv",
     "phasor.domains.filters": "filt",
+    "phasor.domains.sweep": "sweep",
+    "phasor.domains.ndlattice": "nd",
+    "phasor.domains.net": "net",
     "phasor.domains.waves": "ac",  # wave fields are named through ``ac``
 }
 
@@ -122,11 +125,14 @@ def document_to_python(doc: Document) -> str:
     if doc.objects:
         lines.append("")
     owned = set(doc.narration.markers()) if doc.narration else set()
+    if doc.narration is not None:
+        # The recorded narration as the document's own op: its timing and markers exactly,
+        # without speaking it again. Re-record with s.narrate(...).
+        narration = _op("set_narration", narration=doc.narration.model_dump(mode="json"))
+        lines.append(f"s.engine.apply({narration}, origin='script')")
     for name, t in doc.timeline.markers.items():
         if name not in owned:
             lines.append(f"s.marker({name!r}, {float(t)!r})")
-    if doc.narration is not None:
-        lines.append("# (narration is not reproduced here: record it with s.narrate(...))")
     for path, segs in doc.timeline.tracks.items():
         for seg in segs:
             same_anchor = (
@@ -143,6 +149,20 @@ def document_to_python(doc: Document) -> str:
             else:
                 lines.append(f"s.segment({path!r}, {_ref(seg.t0)}, {_ref(seg.t1)}, {_lit(seg.to)}, "
                              f"ease={seg.ease!r})")  # fmt: skip
+    for bed in doc.sound.beds:
+        parts = [repr(bed.path)]
+        for key in ("start", "end"):
+            ref = getattr(bed, key)
+            if ref is not None:
+                parts.append(f"{key}={_ref(ref)}")
+        parts += [f"gain={bed.gain!r}", f"fade_in={bed.fade_in!r}", f"fade_out={bed.fade_out!r}",
+                  f"loop={bed.loop!r}", f"id={bed.id!r}"]  # fmt: skip
+        lines.append(f"s.bed({', '.join(parts)})")
+    for cue in doc.sound.cues:
+        parts = [_ref(cue.at), repr(cue.sound), f"gain={cue.gain!r}"]
+        parts += [f"{k}={getattr(cue, k)!r}" for k in ("pan", "midi", "dur", "voice")
+                  if getattr(cue, k) not in (None, 0.0)]  # fmt: skip
+        lines.append(f"s.cue({', '.join(parts)}, id={cue.id!r})")
     for c in doc.constraints:
         lines.append(f"s.constrain({c.rule!r}, priority={c.priority!r})")
     for c in doc.controls:

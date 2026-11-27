@@ -21,7 +21,8 @@ datas += [(str(ROOT / "docs" / "ai"), "phasor/_docs/docs/ai"),
           (str(ROOT / "kit"), "phasor/_docs/kit"),  # the AI kit (phasor kit)
           (str(ROOT / "skills"), "phasor/_docs/skills"),
           (str(ROOT / "STYLE.md"), "phasor/_docs")]
-hidden = collect_submodules("phasor") + ["moderngl", "glcontext", "av", "kiwisolver"]
+# soundfile is imported lazily (time/sound.py); its hook brings libsndfile along.
+hidden = collect_submodules("phasor") + ["moderngl", "glcontext", "av", "kiwisolver", "soundfile"]
 binaries = []
 excludes = ["cupy", "tkinter", "IPython", "ipywidgets", "notebook", "pytest"]
 # PHASOR_PACKAGE_GPU=1 bundles CuPy and the CUDA libraries it needs (NVIDIA machines; about

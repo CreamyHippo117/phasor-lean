@@ -58,6 +58,25 @@ def lerp(a: Value, b: Value, u: float) -> Value:
     return a + (b - a) * u
 
 
+def geo_lerp(a: Value, b: Value, u: float) -> Value:
+    """Interpolate in log space, ``a (b / a)^u``: equal steps in ``u`` give equal factors.
+    Tuples go component by component; every number must be positive (``positive``)."""
+    if isinstance(a, tuple):
+        return tuple(geo_lerp(x, y, u) for x, y in zip(a, b, strict=True))
+    if u == 0.0:
+        return a
+    if u == 1.0:
+        return b
+    return a * (b / a) ** u
+
+
+def positive(v: Any) -> bool:
+    """True for a positive number or a tuple of them: what ``geo_lerp`` can move between."""
+    if isinstance(v, tuple):
+        return bool(v) and all(positive(x) for x in v)
+    return isinstance(v, int | float) and not isinstance(v, bool) and v > 0
+
+
 def _pad3(v: Any) -> Any:
     if isinstance(v, list | tuple) and len(v) == 2:
         return (*v, 0.0)

@@ -141,6 +141,31 @@ def record(impl, state: SceneState) -> Recording:
     return rec
 
 
+def census(state: SceneState, ids) -> dict[str, tuple[tuple[str, ...], int, str]]:
+    """What each of ``ids`` draws in ``state``: its commands by kind, how many vertices and
+    corners they have, and a digest of its resolved params. Drawn afresh (never cached), so
+    it shows what the object's code does in this process now. Two processes with the same
+    document and the same code agree on it exactly; render workers are checked with it
+    (``scene.parallel_frames``). Ids not in the state are left out."""
+    import hashlib
+
+    out: dict[str, tuple[tuple[str, ...], int, str]] = {}
+    for oid in ids:
+        if oid not in state:
+            continue
+        o = state[oid]
+        cam = state.camera_for(o)
+        rec = Recorder(cam.right, cam.up)
+        digest = hashlib.sha1(repr(o.params).encode("utf-8")).hexdigest()[:12]
+        try:
+            o.impl.draw(rec, state, "color")
+        except Exception as e:  # the same failure in both processes is the same census
+            out[oid] = ((f"error: {type(e).__name__}",), 0, digest)
+            continue
+        out[oid] = (tuple(rec.kinds), sum(len(p) for p in rec.points), digest)
+    return out
+
+
 def _anchor(state: SceneState, object_id: str) -> np.ndarray:
     """Where an object that drew nothing is: its ``pos`` when it has one, else the origin."""
     pos = getattr(state[object_id].params, "pos", None)

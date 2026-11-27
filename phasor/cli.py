@@ -180,7 +180,8 @@ def _cmd_render(args: argparse.Namespace) -> int:
     if args.frame is not None:
         print(f"wrote {r['path']} ({w}x{h}, t = {args.frame:g} s)")
     else:
-        sound = ", with narration" if r["narration"] else ""
+        heard = [k for k, on in (("narration", r["narration"]), ("sounds", r["sounds"])) if on]
+        sound = f", with {' and '.join(heard)}" if heard else ""
         print(f"\nwrote {r['path']}: {r['frames']} frames, {w}x{h} at {r['fps']:g} fps, "
               f"{r['encoder']}{sound}")  # fmt: skip
     return 0
@@ -199,7 +200,7 @@ def _cmd_kit(args: argparse.Namespace) -> int:
     print("  written: " + ", ".join(r["written"]))
     if r["kept"]:
         print("  kept (yours): " + ", ".join(r["kept"]))
-    print(f'start an AI there: cd "{r["dest"]}" and run claude; then /scene <your idea>')
+    print(f'start an AI there: cd "{r["dest"]}" and run claude; then /scene-plan <your idea>')
     return 0
 
 

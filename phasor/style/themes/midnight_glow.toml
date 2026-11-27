@@ -73,7 +73,21 @@ gap = 0.3
 pause_per_change = 0.25
 pause_max = 1.5
 
-# 3D camera. `drift`: slow sway in azimuth, degrees either
+[sound]
+# The mix (time/sound.py). Levels are loudness (ITU BS.1770), not peaks.
+target = -16.0    # LUFS: the voice, and the whole mix after the final trim
+bed = -18.0       # LU relative to the voice: a bed's level when it gives no gain
+cue = -10.0       # LU relative to the voice: a cue's level (its loudest 400 ms)
+duck = 8.0        # dB beds dip while the narration speaks
+attack = 0.25     # s: the dip starts this long before the speech
+release = 0.6     # s: and recovers over this long after it
+ceiling = -1.0    # dBTP: the limiter's ceiling
+knee = 2.0        # dB: the limiter's soft knee
+masking = 12.0    # lint bed_masks_voice: a bed closer than this to the voice in speech
+word_gap = 0.08   # lint cue_on_word: s between a cue's peak and a stressed word's onset
+clip = 3.0        # lint audio_clip: dB over full scale the mix may reach before the limiter
+
+# 3D camera . `drift`: slow sway in azimuth, degrees either
 # way, over `drift_period` seconds. The camera solver: `fill` is the share of the frame
 # height the kept objects should span, `thirds` and `smooth` are the weights of those goals,
 # `margin` keeps kept objects this far (frame heights) inside the edge. The solver keeps
@@ -121,18 +135,19 @@ text_min = 0.02      # text lower than this share of the frame height
 clutter = 4          # more objects than this changing at once in one block
 crowded = 0.05       # a placed label still covered by more than this share is "unsolved"
 occluded = 0.9       # 3D: a label less visible than this is "occluded_label"
+bake_renders = 3000  # slow_layout: occlusion buffers the layout bake may render (one per 10 Hz key while a label is shown)
 
 # Aesthetic rules (lint(aesthetic=True)); the taste knobs.
-hues = 3             # color_restraint: more than this many saturated hues on screen
+hues = 3             # color_restraint: more than this many saturated flat-paint hues on screen (colormaps do not count)
 clip = 0.01          # glow_clip: share of pixels allowed to clip to white after tone mapping
 density_min = 0.04   # density: occupied share of the frame under this is "empty"
-density_max = 0.6    # ... and over this is "crowded"
+density_max = 0.6    # ... and over this, with two or more objects, is "crowded" (one alone may fill the frame)
 rhythm = 0.3         # motion_rhythm: seconds within which unrelated objects should not all move
 margin = 0.05        # margin: content must stay out of this outer share of the frame
 stroke_mix = 2       # stroke_mix: more than this many stroke weights in one frame
 impure = 1e-9        # impure_updater (strict): two answers of one updater may differ by this much
 
-# Living motion. Everything is a smooth deterministic function of
+# Living motion . Everything is a smooth deterministic function of
 # (object id, seed, t); scene `life` "off" turns it all off, "subtle" scales amplitudes by
 # `subtle`, "lively" uses them as written. `glow`: bloom swells by this share; `point`: dots
 # drift by this share of their own radius; `field`: color fields turn their colors by this share of the wheel;
@@ -154,6 +169,8 @@ subtle = 0.5
 stagger = 0.12
 dim_level = 0.25
 orbit_swing = 35.0   # degrees the camera swings during orbit_reveal
+camera_lead = 3.0   # seconds (at least) the camera takes to swing to protect an appearing object
+camera_speed = 2.0  # degrees per second that swing stays under (longer lead for a bigger swing)
 transform_arc = 0.9   # line heights a part arcs by when transform moves it past other parts
 
 [motion.reveal]
@@ -197,7 +214,7 @@ ease = "in_out"
 duration = 2.4
 ease = "smoother"
 
-# The later motion verbs: an equation becoming the next, a shape becoming
+# The motion verbs added after the roadmap: an equation becoming the next, a shape becoming
 # another, text writing in, a point travelling a curve, quick emphasis, and a value swept.
 [motion.transform]
 duration = 1.3
@@ -230,3 +247,8 @@ ease = "smooth"
 [motion.sweep]
 duration = 2.5
 ease = "in_out"
+
+# unfold: one mirror room swinging over a wall like a page (the ray keeps a steady speed).
+[motion.unfold]
+duration = 1.1
+ease = "smoother"

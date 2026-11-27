@@ -25,6 +25,7 @@ _LAZY = {
     "Callout": "phasor.domains.basic",
     "Counter": "phasor.domains.basic",
     "Value": "phasor.domains.basic",
+    "HingedCopy": "phasor.domains.unfold",
     "to_latex": "phasor.core.texconv",
     "to_mathtext": "phasor.core.texconv",
 }
@@ -42,6 +43,9 @@ _MODULES = {  # domain modules: ``from phasor import cx``
     "dyn": "phasor.domains.dynamics",
     "conv": "phasor.domains.convolution",
     "filt": "phasor.domains.filters",
+    "sweep": "phasor.domains.sweep",
+    "nd": "phasor.domains.ndlattice",
+    "net": "phasor.domains.net",
 }
 
 __all__ = ["__version__", *_LAZY, *_MODULES]

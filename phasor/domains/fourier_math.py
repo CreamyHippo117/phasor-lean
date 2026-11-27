@@ -208,3 +208,83 @@ def convolve(a, b) -> np.ndarray:
     n = len(a) + len(b) - 1
     size = 1 << (n - 1).bit_length()
     return np.fft.irfft(np.fft.rfft(a, size) * np.fft.rfft(b, size), size)[:n]
+
+
+# ---------------------------------------------------------------- sampling and aliasing
+#
+# A tone is ``a sin(2 pi f t + phase)``, as in ``sinusoids``; samples are taken at ``t = k / fs``.
+
+
+def fold(f, fs: float) -> np.ndarray:
+    """The signed frequency a tone appears at once sampled at ``fs``: ``f`` moved by a whole
+    number of ``fs`` into [-fs / 2, fs / 2). Per sample the tone's phasor turns ``fold / fs`` of
+    a turn the short way round: below zero it seems to turn backwards (the wagon wheel)."""
+    f = np.asarray(f, dtype=np.float64)
+    return np.mod(f + fs / 2, fs) - fs / 2
+
+
+def alias_tone(
+    f: float, fs: float, amp: float = 1.0, phase: float = 0.0
+) -> tuple[float, float, float]:
+    """The lowest-frequency sinusoid through the samples of ``amp sin(2 pi f t + phase)`` at
+    ``t = k / fs``, as ``(frequency, amplitude, phase)`` with the frequency in [0, fs / 2].
+
+    With ``r = f mod fs``: below ``fs / 2`` it is the same tone at ``r``; above, the tone at
+    ``fs - r`` with its phase reflected (``pi - phase``: the folded wave runs the other way);
+    exactly at ``fs / 2`` every sample is ``amp sin(phase) (-1)^k``, so the alias is the cosine
+    ``amp sin(phase) cos(pi fs t)`` (amplitude ``amp sin(phase)``, phase pi / 2). A whole multiple
+    of ``fs`` aliases to the constant ``amp sin(phase)`` (frequency 0)."""
+    if fs <= 0:
+        raise ValueError("the sample rate must be positive")
+    if f < 0:
+        f, amp, phase = -f, -amp, -phase  # sin(-x) = -sin(x)
+    r = math.fmod(f, fs)
+    tol = 1e-12 * max(fs, f)
+    if r > fs - tol:  # a whole multiple, up to rounding
+        r = 0.0
+    half = fs / 2
+    if abs(r - half) <= tol:
+        return half, amp * math.sin(phase), math.pi / 2
+    if r < half:
+        fa, pa = r, phase
+    else:
+        fa, pa = fs - r, math.pi - phase
+    return fa, amp, math.remainder(pa, 2 * math.pi)
+
+
+def tone_sum(freqs, amps, phases, t) -> np.ndarray:
+    """``sum a sin(2 pi f t + phase)`` at the times ``t`` (seconds)."""
+    t = np.asarray(t, dtype=np.float64)
+    out = np.zeros_like(t)
+    for f, a, ph in zip(freqs, amps, phases, strict=True):
+        out = out + a * np.sin(2 * math.pi * f * t + ph)
+    return out
+
+
+def aliases(freqs, amps, phases, fs: float) -> list[tuple[float, float, float]]:
+    """``alias_tone`` of each tone: what the samples of the sum show, tone by tone."""
+    return [alias_tone(f, fs, a, ph) for f, a, ph in zip(freqs, amps, phases, strict=True)]
+
+
+def alias_signal(freqs, amps, phases, fs: float, t) -> np.ndarray:
+    """The sum of the aliases at the times ``t``: the slowest wave through every sample of the
+    sum of tones (the band-limited one, ``sinc_reconstruct`` of infinitely many samples)."""
+    al = aliases(freqs, amps, phases, fs)
+    return tone_sum([a[0] for a in al], [a[1] for a in al], [a[2] for a in al], t)
+
+
+def sample_times(fs: float, start: float, stop: float) -> np.ndarray:
+    """The sampling instants ``k / fs`` in [start, stop]."""
+    k0, k1 = math.ceil(start * fs - 1e-9), math.floor(stop * fs + 1e-9)
+    return np.arange(k0, k1 + 1) / fs
+
+
+def sinc_reconstruct(x, fs: float, t, t0: float = 0.0) -> np.ndarray:
+    """Whittaker-Shannon interpolation: ``sum_n x[n] sinc(fs (t - t0) - n)`` for samples
+    ``x[n]`` taken at ``t0 + n / fs``. It is the original signal if that held no frequency at
+    or above ``fs / 2`` (up to the truncation of the sum near its ends), and the aliases if
+    it did."""
+    x = np.asarray(x, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    u = fs * (t - t0)
+    return np.sinc(u[..., None] - np.arange(len(x))) @ x

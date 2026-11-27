@@ -280,3 +280,141 @@ def filtered_tones(f: Filter, freqs, amps, n: int):
     x = sum((a * np.sin(2 * math.pi * fr * t) for fr, a in zip(freqs, amps, strict=True)),
             np.zeros(n))  # fmt: skip
     return x, f.apply(x)
+
+
+# ---------------------------------------------------------------- modes as rotating hands
+#
+# A filter's impulse response is a sum of modes, h[n] = sum_k r_k lambda_k^n: each pole
+# lambda_k = rho_k e^{i theta_k} is a hand that turns theta_k radians and shrinks by rho_k every
+# tick, starting at its residue r_k. ``PhasorField`` draws them; this is its geometry.
+#
+# Motion blur, exactly. A hand is a segment of width w from its seat out to length a. Over a
+# shutter it turns through dphi = theta * s (``s`` ticks). A point at radius r, an arc length x
+# along the motion from where the hand was when the shutter opened, is lit for the share of the
+# shutter the stroke [x - w/2, x + w/2] covers it: the overlap of that stroke with the swept arc
+# [0, r |dphi|], divided by r |dphi| (the stroke's box convolved with the sweep's box). So the
+# light falls as 1 / r once the arc there is wider than the stroke, its area integral is w times
+# the hand's mean length (the light of the still hand, only spread), and as dphi -> 0 it is the
+# still hand. Its colour is the colour the hand had when it pointed there: the point's own angle.
+
+GOLDEN_ANGLE = math.pi * (3.0 - math.sqrt(5.0))
+SEATS = ("spiral", "grid", "line")
+
+
+def polar(rho, theta) -> tuple[tuple[float, float], ...]:
+    """Poles as (re, im) pairs from radii ``rho`` and angles ``theta`` (radians per tick)."""
+    rho, theta = np.broadcast_arrays(np.asarray(rho, dtype=np.float64),
+                                     np.asarray(theta, dtype=np.float64))  # fmt: skip
+    z = rho * np.exp(1j * theta)
+    return tuple((float(v.real), float(v.imag)) for v in np.ravel(z))
+
+
+def mode_hands(poles, residues, n: float) -> np.ndarray:
+    """Each hand r_k lambda_k^n at a tick ``n`` that may be fractional: |r| rho^n turned to
+    arg r + n theta, with theta the principal angle of the pole (in (-pi, pi])."""
+    lam = _as_complex(poles)
+    r = np.ones(len(lam), complex) if len(residues) == 0 else _as_complex(residues)
+    rho, theta = np.abs(lam), np.angle(lam)
+    with np.errstate(divide="ignore"):
+        mag = np.where(rho > 0, rho ** float(n), 0.0 if n > 0 else 1.0)
+    return r * mag * np.exp(1j * theta * float(n))
+
+
+def seat_offsets(count: int, layout: str, spacing: float, order=None) -> np.ndarray:
+    """(count, 2) seats about (0, 0), neighbours about ``spacing`` apart. ``spiral``: the
+    sunflower (Vogel) spiral, seat j at radius ~ sqrt(j) and j golden angles round, the
+    densest even packing of a disc; ``grid``: rows, filled left to right and top down;
+    ``line``: along x. ``order`` (count,) puts hand ``order[j]`` in seat ``j``."""
+    j = np.arange(count, dtype=np.float64)
+    if layout == "spiral":
+        c = spacing * math.sqrt(math.sqrt(3.0) / (2 * math.pi))  # hexagonal density
+        r, a = c * np.sqrt(j + 0.5), j * GOLDEN_ANGLE
+        xy = np.c_[r * np.cos(a), r * np.sin(a)]
+    elif layout == "grid":
+        cols = max(math.ceil(math.sqrt(count)), 1)
+        rows = math.ceil(count / cols)
+        xy = np.c_[(j % cols - (cols - 1) / 2) * spacing, ((rows - 1) / 2 - j // cols) * spacing]
+    elif layout == "line":
+        xy = np.c_[(j - (count - 1) / 2) * spacing, np.zeros(count)]
+    else:
+        raise ValueError(f"layout must be one of {SEATS}, got {layout!r}")
+    out = np.empty_like(xy)
+    out[np.arange(count) if order is None else np.asarray(order)] = xy
+    return out
+
+
+def phase_hue(angle, shift: float = 0.0) -> np.ndarray:
+    """The share of the colour wheel for an angle (radians): 0 at angle 0, a quarter at pi/2,
+    plus ``shift`` turns, wrapped to [0, 1)."""
+    return (np.asarray(angle, dtype=np.float64) / (2 * math.pi) + shift) % 1.0
+
+
+def sweep_exposure(x, r, sweep: float, width: float) -> np.ndarray:
+    """The share of a shutter a point is lit by a hand of ``width`` turning through ``sweep``
+    radians (its size counts; the sign does not) at radius ``r``, an arc length ``x`` along the
+    motion from the hand's place at the opening: the overlap of [x - w/2, x + w/2] with the swept
+    arc [0, r |sweep|], over r |sweep|. With no sweep it is the still hand, 1 inside the stroke."""
+    x, r = np.broadcast_arrays(np.asarray(x, dtype=np.float64), np.asarray(r, dtype=np.float64))
+    arc = r * abs(sweep)
+    half = width / 2
+    still = (np.abs(x) <= half).astype(np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lit = (np.clip(x + half, 0, arc) - np.clip(x - half, 0, arc)) / arc
+    return np.where(arc > 1e-12 * max(width, 1e-300), lit, still)
+
+
+def swept_hand(angle0: float, sweep: float, length0: float, length1: float, width: float,
+               columns: int, rows: int, light0: float = 1.0,
+               light1: float = 1.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:  # fmt: skip
+    """The region a hand lights over one shutter, as a grid of ``rows`` by ``columns + 3``
+    vertices: positions (R, C, 2) about its seat, exposure (R, C) (``sweep_exposure`` times the
+    hand's light) and the angle (R, C) each vertex is at (its colour).
+
+    The hand starts at ``angle0`` with length ``length0`` and light ``light0`` and ends turned
+    by ``sweep`` with ``length1`` and ``light1``, both changing geometrically on the way (a pole's
+    rho^n). At every radius the vertices sit exactly on the corners of the exposure profile: the
+    first and last at its ends (unlit), the rest spread over its plateau, so the mesh is exact
+    across the motion and only the 1 / r fall along the radius is sampled (rows spaced
+    geometrically, densest at the seat)."""
+    cols = max(int(columns), 1)
+    tau = np.linspace(0.0, 1.0, cols + 1)
+    ratio = length1 / length0 if length0 > 0 else 1.0
+    length = length0 * ratio**tau if length0 > 0 else length0 + (length1 - length0) * tau
+    light = light0 * (light1 / light0) ** tau if light0 > 0 else light0 + (light1 - light0) * tau
+    length = np.r_[length[0], length, length[-1]]  # the two unlit edges
+    light = np.r_[light[0], light, light[-1]]
+    top = max(float(length.max()), 1e-300)
+    low = min(max(width / (4 * top), 1e-3), 0.5)
+    u = np.r_[0.0, np.geomspace(low, 1.0, max(int(rows), 2) - 1)]
+    r = u[:, None] * length[None, :]  # (R, C)
+    arc = r * abs(sweep)
+    mu = np.minimum(width, arc)
+    half = width / 2
+    x = np.empty_like(r)
+    x[:, 0], x[:, -1] = -half, arc[:, -1] + half
+    x[:, 1:-1] = (-half + mu[:, 1:-1]) + tau[None, :] * (arc[:, 1:-1] + width - 2 * mu[:, 1:-1])
+    exposure = np.empty_like(r)
+    for c in range(r.shape[1]):  # the profile of each column's own radius
+        exposure[:, c] = sweep_exposure(x[:, c], r[:, c], sweep, width)
+    exposure *= light[None, :]
+    sign = 1.0 if sweep >= 0 else -1.0
+    angle = angle0 + sign * x / np.maximum(r, half)
+    pts = np.stack([r * np.cos(angle), r * np.sin(angle)], axis=-1)
+    return pts, exposure, angle
+
+
+def grid_triangles(rows: int, cols: int) -> np.ndarray:
+    """(M, 3) triangles of a ``rows`` x ``cols`` vertex grid stored row by row."""
+    k = (np.arange(rows - 1)[:, None] * cols + np.arange(cols - 1)[None, :]).ravel()
+    return np.vstack([np.c_[k, k + cols, k + 1], np.c_[k + 1, k + cols, k + cols + 1]])
+
+
+def mesh_integral(pts: np.ndarray, values: np.ndarray) -> float:
+    """The integral over a grid mesh (``swept_hand``'s) of a value interpolated linearly on each
+    triangle: area times the mean of the corners, summed. How tests weigh a smear's light."""
+    rows, cols = values.shape
+    tri = grid_triangles(rows, cols)
+    p, v = pts.reshape(-1, 2)[tri], values.ravel()[tri]
+    a, b = p[:, 1] - p[:, 0], p[:, 2] - p[:, 0]
+    area = np.abs(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]) / 2
+    return float((area * v.mean(axis=1)).sum())

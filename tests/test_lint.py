@@ -144,6 +144,26 @@ def test_tiny_orphan_and_clutter(passes):
 
 
 @pytest.mark.parametrize("passes", MODES)
+def test_a_layout_that_renders_many_occlusion_buffers_is_flagged(passes, monkeypatch):
+    from phasor.style.theme import load_theme
+
+    monkeypatch.setitem(load_theme("midnight_glow").lint, "bake_renders", 40)
+    s = _scene(passes)
+    s.add(Text(id="pole.label", text="pole"))
+    s.marker("end", 6.0)
+    s.constrain("label(pole) near pole")
+    issue = _one(s.engine, "slow_layout")
+    assert issue.severity == "warning" and issue.ids == ("pole.label",) and not issue.fix
+    assert issue.times == (0.0,) and "61 occlusion buffers" in issue.message
+    assert "0-6 s" in issue.message and issue.fix_hint
+    # Shown for two seconds only, it costs about twenty: below the limit.
+    s.at(1.0).reveal("pole.label")
+    s.at(3.0).exit("pole.label")
+    assert "slow_layout" not in _codes(s.engine)
+    assert s.engine.layout.renders < 40
+
+
+@pytest.mark.parametrize("passes", MODES)
 def test_guards_are_errors_when_they_do_not_hold(passes):
     s = _scene(passes)
     s.add(Dot(id="moon", pos=(0.4, 0), r=0.3))

@@ -28,6 +28,43 @@ cannot be constrained (`not_movable`).
 Lint checks markers, transition ends and every 0.5 s. A collision that lasts two frames
 between samples is missed. Put a marker where it matters, or pass a smaller `step`.
 
+## A `near` label makes a long 3D scene slow to edit
+
+The label placer draws one occlusion buffer (a depth buffer in 3D) at every 10 Hz key time
+while something it places is shown. A label left visible for the whole of a 17-minute scene
+is 10 000 depth renders, and every verb the script runs after it reads the scene and bakes
+to where the verb starts. Show the label only while it is needed (`reveal` ... `exit`):
+hidden, it costs nothing. Write the rule after the verbs that hide it (a label is shown
+until its `reveal` says otherwise, so a rule written first makes the `reveal` itself bake
+everything before it). Edits after the shown span reuse the bake, and so does a `set` on an
+object that is hidden until after it (opacity or dim 0), that no rule names and nothing reads;
+an edit before it (or another `set`, a new object, a new rule) bakes the shown span again.
+Lint `slow_layout` says when a bake is over the theme's `[lint] bake_renders`. A label that never moves needs no rule: give it a `pos`.
+An expression that reads a placed object's `pos`, or an object that names it (a
+`circumscribe` ring), makes the bake run everywhere, hidden or not.
+
+## Camera goals make every edit of a long 3D scene bake all of it
+
+The camera solver is global: the scale of its search comes from every goal object over the
+whole timeline, and it re-checks the whole path. So a bake with `camera ...` rules is never
+reused after an edit, and every verb the script runs after such a rule bakes the whole scene,
+with a depth buffer per key and per `avoid_occlusion` object (one buffer per camera it
+tries; none while nothing else occludes, and none while the object is hidden, outside the
+lead-in before it appears). Write the camera rules after the verbs, as the last lines of
+the script, and give `avoid_occlusion` only the objects that matter. Lint `slow_layout`
+counts these buffers too.
+
+## 3D: the camera moves before my object appears
+
+`camera avoid_occlusion(x)` protects nothing while `x` is hidden, so the camera is free
+then, and it swings into a view that shows `x` over a lead-in before `x` appears (theme
+`[motion] camera_lead`, longer for a bigger swing so it stays under `camera_speed`). That
+early swing is meant: the camera is in place when `x` fades in instead of jerking then.
+If `x` appears soon after the start, or is hidden only briefly, there is no room for a
+slow swing, and the camera protects `x` throughout, as it did before 2026-11-26. A scene
+whose camera has a handoff motion (an `orbit` or `focus_pull` at a marker on a parameter
+left unset) also protects throughout.
+
 ## `overlap` on a label that sits on a big shape
 
 A label fully inside a shape is not an overlap; it is judged by `contrast`. A label half on
@@ -55,6 +92,27 @@ report `visible_fraction` 1.0. Its own visibility is still measured.
 `set_param` and `set_style` on a scene built by a `.py` script go to `name.overrides.json`.
 If the script later drops that object, lint reports `orphan_override` (an error). Fix the
 script or delete the entry; phasor never discards a tweak silently.
+
+## Render workers and state the scene script sets up
+
+`phasor render --workers N` starts fresh processes (spawned, as on Windows). Each builds the
+scene from the parent's document and bake; it does not have what the parent's process had.
+A scene-local type that draws from module-level state the *script* fills (a registry of
+drawings in `progs.py`, filled by `scene.py`) would draw nothing there. So when the scene
+came from a script (`phasor render scene.py`, `phasor.load("scene.py")`) and the document
+names scene code (`meta.modules`), every worker runs that script first, then uses the
+parent's document (`scene._worker_engine`). A script edited after the render started is
+refused. `phasor.load("scene.py")` also names the script in `meta.modules`, after the
+type's modules, when the scene has code of its own, so the saved `.phasor.json` opened with
+scripts allowed runs it too and draws the same in one process. Opening such a document
+runs the whole script. A document saved before 2026-11-26 does not name its script: load
+the script and save again.
+
+Safety net: before its first frame, each worker reports what the scene's own objects
+(scene-local types, objects with updaters, their parts) draw at that frame
+(`core.record.census`); if it differs from the parent, the render stops at once, naming
+the objects. Keep such state in params, in a file the document names, or fill it in the
+module `meta.modules` names; or render with `--workers 1`.
 
 ## GL contexts
 

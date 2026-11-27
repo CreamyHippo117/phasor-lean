@@ -14,6 +14,8 @@ a good fit for scenes written by an AI, which can look at its own work and fix i
   Riemann surfaces, heat and wave fields, room acoustics, point clouds, Fourier series,
   phase portraits, filters, graphs. See [`examples/`](examples).
 - **The prism look** by default: glowing strokes on a dark stage, color running along curves.
+- **Sound**: music and ambience beds and one-shot cues under the narration, ducked and mixed to a
+  loudness target, editable in the desktop editor's Sound tab.
 
 ## Install
 
@@ -77,16 +79,18 @@ The whole Python API, with a runnable example for each name, is in
 phasor was built so an AI can write a scene, check it and fix it on its own. Two ways in:
 
 **A ready folder for Claude Code.** `phasor kit` sets up a folder with instructions, the
-docs, sorted examples, a `/scene` command and a taste file:
+docs, sorted examples, a `/scene-plan` and a `/scene-builder` command and a taste file:
 
 ```bash
 uv sync --extra gl --extra encode --extra mcp
 uv run phasor kit ~/phasor-scenes
-cd ~/phasor-scenes && claude          # then: /scene a Fourier series building a square wave
+cd ~/phasor-scenes && claude          # then: /scene-plan a Fourier series building a square wave
+                                      # and, once you like the plan: /scene-builder plans/NAME.md
 ```
 
-The AI writes `scenes/NAME.py`, lints it, looks at the storyboard, fixes what is wrong and
-renders a preview. When you say what you like or dislike, it adds a line to `TASTE.md` and
+`/scene-plan` turns an idea into a plan (what to show, in what order, with what math) and writes
+`plans/NAME.md`; `/scene-builder` codes the plan as `scenes/NAME.py`, lints it, looks at the storyboard,
+fixes what is wrong and renders a preview. When you say what you like or dislike, it adds a line to `TASTE.md` and
 reads it before every scene. Run `phasor kit` on the folder again after updating phasor:
 your `TASTE.md`, `WISHLIST.md` and `scenes/` are never touched. See [`kit/README.md`](kit/README.md).
 
@@ -138,6 +142,7 @@ them in the editor. A few to start with:
 | --- | --- |
 | `prism_primes.py` | The reference look: primes heard through the zeta zeros |
 | `room_3d.py` | A 3D room with sound bouncing in it, the camera circling |
+| `sound_bed.py` | A bed under the narration, with cues on the markers |
 | `prism_domain.py`, `prism_transitions.py` | Domain coloring in the prism look, and a function changing |
 | `riemann_sqrt.py` | The Riemann surface of the square root, seen through an orbit |
 | `deep_zoom.py` | A dive into the Mandelbrot set to 1e-30 |

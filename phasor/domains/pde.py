@@ -27,7 +27,14 @@ from phasor.core.simulation import runner_for
 from phasor.core.state import SceneState
 from phasor.core.values import Vec3
 from phasor.domains import pde_math as pm
-from phasor.domains.heatmap import PRISM, HeatParams, heat_pixels, lut_colour, wheel_colour
+from phasor.domains.heatmap import (
+    PRISM,
+    HeatParams,
+    Recipe,
+    heat_pixels,
+    wheel_colour,
+    wheel_recipe,
+)
 from phasor.domains.strokes import disc, polyline, polylines, with_alpha
 
 CHECKPOINT_EVERY = 100
@@ -307,16 +314,16 @@ def _heat(v: np.ndarray, colormap, size, p, glow: float, state, *, signed=None):
     plain or in the prism look (``HeatParams``, a ``glow`` role above 1). ``signed``:
     (positive, negative) colours for a wave, whose 0.5 is rest: with glow both directions
     glow, each in its own colour, or (``p.hue_cycles``) in the hue of their level."""
-    colour = lut_colour(ramp(colormap, np.float32), "linear" if p.smooth else "nearest")
-    weight = (lambda x: x) if glow > 1 else None
+    weight = "value" if glow > 1 else None
+    recipe = Recipe(lut=ramp(colormap, np.float32), blend=p.smooth, weight=weight)
     if signed is not None and glow > 1:
         pos, neg = (np.asarray(c[:3], dtype=np.float64) for c in signed)
-        weight = lambda x: np.abs(2 * x - 1)  # noqa: E731
-        colour = lambda x: np.where((x >= 0.5)[..., None], pos, neg)  # noqa: E731
+        weight = "centre"
+        recipe = Recipe(colour="sign", positive=pos, negative=neg, sign_at=0.5, weight=weight)
     if p.hue_cycles > 0:
-        colour = wheel_colour(colormap, p)
+        recipe = wheel_recipe(colormap, p, weight=weight)
     return heat_pixels(
-        v, size, colour, how="smooth" if p.smooth else "linear", weight=weight,
+        v, size, recipe, how="smooth" if p.smooth else "linear",
         background=state.background, **p.drawing(),
     )  # fmt: skip
 

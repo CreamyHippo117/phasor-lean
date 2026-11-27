@@ -90,3 +90,57 @@ def contact_sheet(cells: list[tuple[str, np.ndarray]], columns: int = 3) -> np.n
         draw.text((x, y + 2), caption, fill=CAPTION_FG, font=font)
         sheet.paste(Image.fromarray(still).convert("RGB"), (x, y + CAPTION))
     return np.asarray(sheet)
+
+
+LANE_H = 34
+LANE_LABEL = 120
+LANE_RANGE = (-60.0, -10.0)  # LUFS drawn bottom to top
+LANE_COLORS = {"voice": (236, 239, 244), "bed": (129, 161, 193), "cue": (235, 203, 139)}
+SPEECH_BG = (34, 40, 52)
+
+
+def sound_lanes(lanes: list[dict[str, Any]], duration: float, width: int,
+                markers: dict[str, float], spans: list[tuple[float, float]],
+                frames: list[float]) -> np.ndarray:  # fmt: skip
+    """Loudness lanes to sit under a storyboard: one row per lane
+    (``{"label", "kind", "times", "lufs", "marks"}``: its loudness in LUFS over time, and
+    for cues the times they play, drawn as diamonds), the spoken spans shaded, markers as
+    thin lines and the storyboard's frames as ticks, all on the scene's time axis."""
+    rows = max(1, len(lanes))
+    img = Image.new("RGB", (width, PAD + rows * (LANE_H + 4) + 16), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    font = _font(11)
+    x0, x1 = LANE_LABEL, width - PAD
+    lo, hi = LANE_RANGE
+
+    def x_of(t: float) -> float:
+        return x0 + (x1 - x0) * (t / duration if duration > 0 else 0.0)
+
+    for k, lane in enumerate(lanes):
+        top = PAD + k * (LANE_H + 4)
+        bottom = top + LANE_H
+        for a, b in spans:
+            draw.rectangle((x_of(a), top, x_of(b), bottom), fill=SPEECH_BG)
+        draw.rectangle((x0, top, x1, bottom), outline=(60, 66, 80))
+        color = LANE_COLORS.get(lane["kind"], CAPTION_FG)
+        draw.text((PAD, top + LANE_H // 2 - 6), str(lane["label"])[:18], fill=color, font=font)
+        runs: list[list[tuple[float, float]]] = [[]]
+        for t, v in zip(lane["times"], lane["lufs"], strict=True):
+            if np.isfinite(v) and 0 <= t <= duration:
+                u = (min(max(v, lo), hi) - lo) / (hi - lo)
+                runs[-1].append((x_of(t), bottom - u * LANE_H))
+            elif runs[-1]:
+                runs.append([])
+        for run in runs:
+            if len(run) > 1:
+                draw.line(run, fill=color, width=1)
+        for t in lane.get("marks", ()):
+            cx, cy = x_of(t), top + LANE_H / 2
+            draw.polygon([(cx, cy - 5), (cx + 5, cy), (cx, cy + 5), (cx - 5, cy)], fill=color)
+    end = PAD + rows * (LANE_H + 4)
+    for t in markers.values():
+        draw.line((x_of(t), PAD, x_of(t), end - 4), fill=(76, 86, 106))
+    for t in frames:
+        draw.line((x_of(t), end, x_of(t), end + 6), fill=CAPTION_FG)
+    draw.text((PAD, end), f"loudness {lo:g} to {hi:g} LUFS", fill=(130, 136, 150), font=font)
+    return np.asarray(img)

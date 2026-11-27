@@ -36,6 +36,7 @@ MATERIALS = {  # broadband absorption coefficients (energy absorbed per reflecti
     "anechoic": 0.99,
 }
 MAX_IMAGES = 2_000_000
+MAX_ORDER = 113  # the highest order within MAX_IMAGES (image_count(113) is 1,949,703)
 
 
 def doppler_wavefronts(
@@ -104,32 +105,40 @@ def eyring_rt60(size, alpha: float, stats=None) -> float:
         math.inf if alpha <= 0 else 0.0)  # fmt: skip
 
 
+def image_count(order: int) -> int:
+    """How many image sources ``image_sources`` makes for ``order`` (exactly, without making
+    them): along each axis one image has 0 reflections and two have each count above."""
+    w = np.r_[1, np.full(max(order, 0), 2)].astype(np.int64)
+    return int(np.convolve(np.convolve(w, w), w)[: order + 1].sum())
+
+
 def image_sources(size, source, order: int, alpha: float) -> dict[str, np.ndarray]:
     """Image sources of ``source`` in a shoebox room (corner at the origin) with up to
     ``order`` wall reflections. Returns arrays: ``pos`` (N, 3), ``reflections`` (N,), and
     ``gain`` (N,) = (sqrt(1 - alpha)) ** reflections (pressure reflection factor). The
-    source itself (order 0) is first. Deterministic order: by reflections, then position."""
+    source itself (order 0) is first. Deterministic order: by reflections, then position.
+    About (4/3) order^3 images; ``MAX_IMAGES`` caps it (order 113 or so)."""
     size = np.asarray(size, dtype=np.float64)
     src = np.asarray(source, dtype=np.float64)
     if order < 0:
         raise ValueError("order must be 0 or more")
+    total = image_count(order)
+    if total > MAX_IMAGES:
+        raise ValueError(f"order {order} needs {total:,} image sources "
+                         f"(limit {MAX_IMAGES:,}); lower the order")  # fmt: skip
     q = np.arange(-order, order + 1)
     axes = []
     for L, s in zip(size, src, strict=True):
         pos = np.concatenate([2 * L * q + s, 2 * L * q - s])
         refl = np.concatenate([np.abs(2 * q), np.abs(2 * q - 1)])
         keep = refl <= order
-        axes.append((pos[keep], refl[keep]))
-    n = [len(a[0]) for a in axes]
-    if n[0] * n[1] * n[2] > MAX_IMAGES:
-        raise ValueError(f"order {order} needs {n[0] * n[1] * n[2]:,} image sources "
-                         f"(limit {MAX_IMAGES:,}); lower the order")  # fmt: skip
-    px, py, pz = np.meshgrid(axes[0][0], axes[1][0], axes[2][0], indexing="ij")
-    rx, ry, rz = np.meshgrid(axes[0][1], axes[1][1], axes[2][1], indexing="ij")
-    refl = (rx + ry + rz).ravel()
-    keep = refl <= order
-    pos = np.stack([px.ravel(), py.ravel(), pz.ravel()], axis=1)[keep]
-    refl = refl[keep]
+        axes.append((pos[keep], refl[keep].astype(np.int16)))
+    # only the combinations within the order: the reflections summed first (small integers),
+    # the positions gathered for those alone
+    (px, rx), (py, ry), (pz, rz) = axes
+    i, j, k = np.nonzero(rx[:, None, None] + ry[None, :, None] + rz[None, None, :] <= order)
+    pos = np.stack([px[i], py[j], pz[k]], axis=1)
+    refl = rx[i].astype(np.int64) + ry[j] + rz[k]
     key = np.lexsort((pos[:, 2], pos[:, 1], pos[:, 0], refl))
     pos, refl = pos[key], refl[key]
     return {"pos": pos, "reflections": refl, "gain": np.sqrt(1.0 - alpha) ** refl}

@@ -68,6 +68,7 @@ def test_the_critic_does_not_invent_a_hero_when_the_story_has_not_started():
     s = Scene("late", passes=None)
     s.set("camera.height", 5)
     s.add(Dot(id="early", pos=(-1, 0), r=0.8, style={"color": "secondary"}))
+    s.add(Dot(id="also", pos=(0, 1), r=0.8, style={"color": "secondary"}))  # a lone one would do
     s.add(Dot(id="hero", pos=(1, 0), r=0.8, style={"color": "highlight"}))
     s.marker("start", 1.0)
     s.marker("later", 4.0)

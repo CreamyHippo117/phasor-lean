@@ -51,3 +51,54 @@ def split_runs(w: np.ndarray, limit: float) -> list[np.ndarray]:
         cur.append(i)
     flush()
     return runs
+
+
+FAMILY_STEP = 1e-5  # below this |a|, a family is extrapolated from a = step and 2 step
+
+
+def family_at(f: Callable[..., np.ndarray], z: np.ndarray, a: float) -> np.ndarray:
+    """``f(z, a)`` for a family of maps. Near ``a = 0`` it is extrapolated along a straight
+    line from ``a = FAMILY_STEP`` and ``2 FAMILY_STEP`` (error about step^2), so a removable
+    0/0 such as ``(exp(a z) - 1)/a`` gives its limit. Holomorphic in z wherever f is."""
+    with np.errstate(all="ignore"):
+        if abs(a) >= FAMILY_STEP:
+            return np.asarray(f(z, a=a), dtype=np.complex128)
+        h = FAMILY_STEP
+        w1 = np.asarray(f(z, a=h), dtype=np.complex128)
+        w2 = np.asarray(f(z, a=2 * h), dtype=np.complex128)
+        return w1 + (a - h) / h * (w2 - w1)
+
+
+def map_at(f: Callable[..., np.ndarray], z: np.ndarray, amount: float, path: str) -> np.ndarray:
+    """The picture at ``amount``: ``"linear"`` is ``deform`` (a straight line from z to
+    f(z)); ``"family"`` is ``family_at`` with ``a = amount``, a holomorphic map at every step."""
+    if path == "family":
+        return family_at(f, z, amount)
+    return deform(f, z, amount)
+
+
+def refine(g: Callable[[np.ndarray], np.ndarray], z: np.ndarray, w: np.ndarray, tol: float,
+           limit: float, cap: int, rounds: int = 8) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """More points where the polyline ``w = g(z)`` strays from its curve: a midpoint whose
+    image is farther than ``tol`` from its chord's middle goes in, round after round, until
+    none do or there are ``cap`` points. Pieces ``split_runs`` would cut (not finite, past
+    ``limit``, a jump of ``limit / 4``) are left alone."""
+    for _ in range(rounds):
+        if len(z) >= cap:
+            break
+        ok = np.isfinite(w) & (np.abs(w) <= limit)
+        seg = ok[:-1] & ok[1:] & (np.abs(np.diff(w)) <= limit / 4)
+        idx = np.flatnonzero(seg)
+        if not len(idx):
+            break
+        zm = (z[idx] + z[idx + 1]) / 2
+        with np.errstate(all="ignore"):
+            wm = np.asarray(g(zm), dtype=np.complex128)
+        far = np.abs(wm - (w[idx] + w[idx + 1]) / 2) > tol
+        far &= np.isfinite(wm)
+        if not far.any():
+            break
+        take = np.flatnonzero(far)[: cap - len(z)]
+        z = np.insert(z, idx[take] + 1, zm[take])
+        w = np.insert(w, idx[take] + 1, wm[take])
+    return z, w

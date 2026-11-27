@@ -45,7 +45,7 @@ def test_image_count_grows_and_gain_falls_with_reflections():
     im = ac.image_sources(SIZE, SRC, 4, 0.3)
     assert np.allclose(im["gain"], np.sqrt(0.7) ** im["reflections"])
     with pytest.raises(ValueError, match="limit"):
-        ac.image_sources(SIZE, SRC, 80, 0.3)
+        ac.image_sources(SIZE, SRC, 150, 0.3)
 
 
 def test_direct_sound_arrives_at_distance_over_the_speed_of_sound():

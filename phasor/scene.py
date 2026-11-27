@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import os
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -24,8 +25,10 @@ from phasor.core import io
 from phasor.core.ids import file_stem
 from phasor.core.objects import ObjectBase, scene_module
 from phasor.core.patch import (
+    AddBed,
     AddConstraint,
     AddControl,
+    AddCue,
     AddObject,
     AddSegment,
     SetCamera,
@@ -35,7 +38,9 @@ from phasor.core.patch import (
     SetParam,
 )
 from phasor.core.schema import (
+    Bed,
     Control,
+    Cue,
     Document,
     ExprSpec,
     MarkerRef,
@@ -49,6 +54,21 @@ from phasor.time import verbs as _verbs
 from phasor.time.narration import block_of, repace
 
 TimeArg = float | tuple[str, float] | str  # seconds, ("marker", offset) or "marker"
+
+
+def _time_ref(t: TimeArg) -> float | MarkerRef:
+    """Seconds, ``"marker"`` or ``("marker", offset)`` as the document stores a time."""
+    if isinstance(t, str):
+        return MarkerRef(marker=t)
+    if isinstance(t, tuple):
+        return MarkerRef(marker=t[0], offset=float(t[1]))
+    return float(t)
+
+
+def _stem(sound: str) -> str:
+    """A sound's name as an id part: ``chime``, or a file's stem (``audio/Drift 2.ogg``:
+    ``drift_2``)."""
+    return re.sub(r"[^a-z0-9_]+", "_", Path(sound).stem.lower()).strip("_") or "file"
 
 
 def expr(source: str) -> ExprSpec:
@@ -93,7 +113,8 @@ class At:
         except KeyError as e:
             raise _verbs.VerbError(f"no marker {e.args[0]!r}; markers are "
                                    f"{sorted(compiled.time_map.markers)}") from None  # fmt: skip
-        motion = getattr(_verbs.Verbs(compiled, engine.state_at(t), at), name)(*args, **kwargs)
+        state = engine._state_upto(t)  # baked only as far as t needs
+        motion = getattr(_verbs.Verbs(compiled, state, at), name)(*args, **kwargs)
         if motion.ops:
             self._scene._apply([self._scene._with_look(op) for op in motion.ops])
         self._end = max(self._end, motion.end)
@@ -176,6 +197,14 @@ class At:
     def sweep(self, path: str, value: float, show: bool = True) -> At:
         """Run a number evenly to ``value``, with a live readout beside its object."""
         return self._verb("sweep", path, value, show)
+
+    def unfold(self, room: str, ray: str, flips: int = 5, speed: float | None = None,
+               index: int | None = None) -> At:  # fmt: skip
+        """A ray bouncing in a room as a straight line through mirror rooms: at each wall
+        the ray reaches, a mirror copy of the room swings over like a page. ``room``: a box,
+        a convex polygon or a convex mesh; ``ray``: a ``Line``, or a ``SoundRays`` with
+        ``index`` naming one of its rays."""
+        return self._verb("unfold", room, ray, flips, speed, index)
 
 
 def _caller_dir() -> Path:
@@ -326,17 +355,68 @@ class Scene:
         """A raw transition between two times, each seconds or a marker (``"go"`` or
         ``("go", 0.5)``: the marker plus an offset): for spans that start and end at
         different markers. Prefer a verb or ``s.at(...).to(...)`` when one marker is enough."""
+        seg = Segment(t0=_time_ref(t0), t1=_time_ref(t1), to=to, ease=ease)
+        self._apply(AddSegment(path=path, segment=seg))
 
-        def ref(t):
-            if isinstance(t, str):
-                return MarkerRef(marker=t)
-            if isinstance(t, tuple):
-                return MarkerRef(marker=t[0], offset=float(t[1]))
-            return float(t)
+    def cue(self, at: TimeArg, sound: str, *, offset: float = 0.0, gain: float | None = None,
+            pan: float = 0.0, midi: float | None = None, dur: float | None = None,
+            voice: str | None = None, id: str | None = None) -> str:  # fmt: skip
+        """A one-shot sound on a marker: ``s.cue("pole", "chime")``, or
+        ``s.cue("zoom", "audio/whoosh.wav", offset=-0.15)`` to land just before the word.
+        ``at`` is a marker (or ``("marker", offset)``; raw seconds work but
+        ``lint(strict=True)`` reports them as ``cue_unanchored``). ``sound`` is a built-in
+        (``tick``, ``chime``, ``whoosh``, ``pop``, ``swell``, ``tone``) or an audio file in
+        the scene's folder. ``gain`` is its loudness in LU relative to the voice (default:
+        the theme's ``[sound] cue``, -10), ``pan`` -1 to 1. ``midi`` tunes ``chime``, ``pop``,
+        ``swell`` and ``tone``; ``dur`` sets the length of ``tone``, ``swell`` and
+        ``whoosh``; ``voice`` is ``tone``'s timbre (``sine``, ``soft``, ``pluck``, ``bell``).
+        Returns its id (``cue_<sound>_<marker>`` unless you give one)."""
+        when = _time_ref(at)
+        if offset:
+            when = (MarkerRef(marker=when.marker, offset=when.offset + offset)
+                    if isinstance(when, MarkerRef) else when + offset)  # fmt: skip
+        cid = id or self._sound_id(f"cue_{_stem(sound)}", when)
+        self._apply(AddCue(cue=Cue(id=cid, at=when, sound=sound, gain=gain, pan=pan, midi=midi,
+                                   dur=dur, voice=voice)))  # fmt: skip
+        return cid
 
-        self._apply(
-            AddSegment(path=path, segment=Segment(t0=ref(t0), t1=ref(t1), to=to, ease=ease))
-        )
+    def bed(self, path: str, *, start: TimeArg | None = None, end: TimeArg | None = None,
+            gain: float | None = None, fade: float = 2.0, fade_in: float | None = None,
+            fade_out: float | None = None, loop: bool = True,
+            id: str | None = None) -> str:  # fmt: skip
+        """Music or ambience under the scene: ``s.bed("audio/drift.ogg",
+        start="intro", end="outro", gain=-18, fade=2.0)``. ``start`` and ``end`` are markers
+        (or seconds; None: the scene's start and end). The file (WAV, FLAC, OGG, MP3) lives
+        in the scene's folder and loops unless ``loop=False``. ``gain`` is its loudness in
+        LU relative to the voice (default: the theme's ``[sound] bed``, -18); while the
+        narration speaks it dips by ``[sound] duck`` dB. ``fade`` sets both equal-power
+        fades (or ``fade_in``/``fade_out``); overlapping beds crossfade. Returns its id
+        (``bed_<file>`` unless you give one)."""
+        bid = id or self._sound_id(f"bed_{_stem(path)}", None)
+        bed = Bed(id=bid, path=path, start=None if start is None else _time_ref(start),
+                  end=None if end is None else _time_ref(end), loop=loop, gain=gain,
+                  fade_in=fade if fade_in is None else fade_in,
+                  fade_out=fade if fade_out is None else fade_out)  # fmt: skip
+        self._apply(AddBed(bed=bed))
+        return bid
+
+    def _sound_id(self, stem: str, when: float | MarkerRef | None) -> str:
+        """``<stem>_<marker>`` (``_<ms>ms`` for seconds, ``<stem>`` alone without a time),
+        unique among the scene's ids and never one that was retired; a repeat gets ``_2``..."""
+        doc = self.engine.document
+        if when is None:
+            base = stem
+        elif isinstance(when, MarkerRef):
+            base = f"{stem}_{when.marker}"
+        else:
+            base = f"{stem}_{abs(round(when * 1000))}ms"
+        taken = {*(o.id for o in doc.objects), *(c.id for c in doc.cameras),
+                 *(x.id for x in (*doc.sound.beds, *doc.sound.cues)), *doc.retired_ids}  # fmt: skip
+        k, sid = 1, base
+        while sid in taken:
+            k += 1
+            sid = f"{base}_{k}"
+        return sid
 
     def marker(self, name: str, t: float) -> None:
         """Place a narration marker at ``t`` seconds."""
@@ -356,16 +436,30 @@ def load(path: str | Path, **engine_kwargs: Any) -> Engine:
     path = Path(path)
     if path.suffix != ".py":
         return Engine.open(path, **engine_kwargs)
+    scene = _run_script(path)
+    overrides = io.load_overrides(path.with_name(path.stem + io.OVERRIDES_SUFFIX))
+    engine_kwargs.setdefault("base_dir", path.parent)
+    engine_kwargs.setdefault("allow_scripts", True)  # the person ran this script: its code runs
+    engine_kwargs.setdefault("script", path)  # render workers run it too (_worker_engine)
+    have = scene.engine.base.meta.modules
+    if have and path.name not in have:
+        # The scene has code of its own, and the script may set up what that code draws
+        # from (a registry): the document names the script too, last, so the saved
+        # document opens with it (contract 3). Last: the script registers the types its
+        # modules define again, from the same files, with what it filled in.
+        scene._apply(SetMeta(field="modules", value=[*have, path.name]))
+    return Engine(scene.engine.base, overrides=overrides, **engine_kwargs)
+
+
+def _run_script(path: Path) -> Scene:
+    """Run a scene script, as ``load`` and every render worker do, and return its Scene."""
     scenes = [v for v in runpy.run_path(str(path), run_name="__phasor__").values()
               if isinstance(v, Scene)]  # fmt: skip
     if len(scenes) != 1:
         raise ValueError(
             f"{path} must define exactly one Scene at module level, found {len(scenes)}"
         )
-    overrides = io.load_overrides(path.with_name(path.stem + io.OVERRIDES_SUFFIX))
-    engine_kwargs.setdefault("base_dir", path.parent)
-    engine_kwargs.setdefault("allow_scripts", True)  # the person ran this script: its code runs
-    return Engine(scenes[0].engine.base, overrides=overrides, **engine_kwargs)
+    return scenes[0]
 
 
 # ---------------------------------------------------------------- render workers (ADR 0003)
@@ -411,8 +505,17 @@ def parallel_frames(engine: Any, workers: int, *, chunk: int = WORKER_CHUNK,
     single process makes. A failed worker stops the render with its error; workers stop by
     themselves if this process dies (the desktop app's Cancel kills it). ``threads``: CPU
     kernel threads in each worker (default ``default_threads(workers)``). ``_fail_at``,
-    ``_on_start`` and ``_slow`` are for tests."""
+    ``_on_start`` and ``_slow`` are for tests.
+
+    A worker built from a scene script runs that script first (``_worker_engine``). Then,
+    before its first frame, each worker reports what the scene's own code draws at that
+    frame (``core.record.census`` of ``_census_ids``); a worker that draws otherwise than
+    this process stops the render there, naming the objects (state the code keeps outside
+    the document, which a worker cannot rebuild). Built-in types are not checked: they draw
+    from the document alone, so a scene without code of its own pays nothing."""
     import multiprocessing
+
+    from phasor.core.record import census
 
     def source(times, size, fps, shutter, samples, field_scale=1.0):
         n = len(times)
@@ -420,6 +523,8 @@ def parallel_frames(engine: Any, workers: int, *, chunk: int = WORKER_CHUNK,
         count = max(1, min(workers, len(stretches)))
         each = default_threads(count) if threads is None else threads
         payload = engine.worker_payload()
+        watch = _census_ids(engine, times[0]) if n else ()
+        checked: set[int] = set()
         ctx = multiprocessing.get_context("spawn")  # Windows has no fork; the same everywhere
         frame_bytes = size[0] * size[1] * 3
         depth = max(chunk + 1, min(2 * chunk, WORKER_BUFFER_BYTES // frame_bytes))
@@ -427,7 +532,8 @@ def parallel_frames(engine: Any, workers: int, *, chunk: int = WORKER_CHUNK,
         procs = [
             ctx.Process(target=_render_worker, name=f"phasor-render-{w}", daemon=True,
                         args=(payload, stretches[w::count], times, size, fps, shutter, samples,
-                              queues[w], 1.0 / count, each, _fail_at, _slow, field_scale))
+                              queues[w], 1.0 / count, each, _fail_at, _slow, field_scale,
+                              watch))
             for w in range(count)
         ]  # fmt: skip
         with _workers_skip_main():
@@ -442,6 +548,14 @@ def parallel_frames(engine: Any, workers: int, *, chunk: int = WORKER_CHUNK,
                     msg = _receive(queues[w], procs[w])
                     if msg[0] == "error":
                         raise RuntimeError(f"render worker {w} failed: {msg[1]}")
+                    if w not in checked:  # a worker's first word: what it draws at frame a
+                        checked.add(w)
+                        here = census(engine.state_at(times[a]), watch) if watch else {}
+                        if msg[0] != "census" or msg[1] != here:
+                            raise RuntimeError(_census_error(w, times[a], here, msg))
+                        msg = _receive(queues[w], procs[w])
+                        if msg[0] == "error":
+                            raise RuntimeError(f"render worker {w} failed: {msg[1]}")
                     if msg[1] != k:
                         raise RuntimeError(f"render worker {w} sent frame {msg[1]}, not {k}")
                     yield msg[2]
@@ -495,9 +609,11 @@ def _receive(q: Any, proc: Any) -> tuple:
 
 
 def _render_worker(payload, stretches, times, size, fps, shutter, samples, q, share, threads,
-                   fail_at, slow, field_scale=1.0) -> None:  # fmt: skip
-    """A render worker's whole life: build the engine from the payload, render its
-    stretches, send each frame. Stops when the parent is gone."""
+                   fail_at, slow, field_scale=1.0, watch=()) -> None:  # fmt: skip
+    """A render worker's whole life: build the engine from the payload (``_worker_engine``),
+    report what the scene's own code draws at its first frame (``watch``: the ids
+    ``_census_ids`` chose), render its stretches, send each frame. Stops when the parent is
+    gone."""
     import multiprocessing
     import queue
     import time
@@ -521,14 +637,18 @@ def _render_worker(payload, stretches, times, size, fps, shutter, samples, q, sh
                     return False
 
     try:
-        from phasor.engine import Engine
+        from phasor.core.record import census
         from phasor.render.cpu import set_threads
         from phasor.render.gpu.budget import set_share
         from phasor.render.job import render_frame
 
         set_share(share)
         set_threads(threads)  # None: every core (one worker, or kernels on the card)
-        engine = Engine.from_payload(payload)
+        engine = _worker_engine(payload)
+        if stretches:
+            t0 = times[stretches[0][0]]
+            if not send(("census", census(engine.state_at(t0), watch) if watch else {})):
+                return
         for a, b in stretches:
             for k in range(a, b):
                 if orphaned():
@@ -542,3 +662,78 @@ def _render_worker(payload, stretches, times, size, fps, shutter, samples, q, sh
                     return
     except BaseException:
         send(("error", traceback.format_exc(limit=12)))
+
+
+def _worker_engine(payload: dict[str, Any], **kwargs: Any) -> Any:
+    """A render worker's engine. When the scene was built by a script (``load``), the
+    script runs here first, as it ran in the parent: whatever it sets up outside the
+    document (types, a registry of drawings its types read) then exists in this process
+    too. The engine itself is still the parent's document with the parent's bake
+    (``Engine.from_payload``, ADR 0003): edits made after loading are kept, and the
+    script's own Scene is dropped. A script edited since the parent loaded it is refused:
+    it could set up something else."""
+    from phasor.engine import _file_sha
+
+    script = payload.get("script")
+    if script:
+        path = Path(script)
+        sha = _file_sha(path)
+        if sha is None or sha != payload.get("script_sha"):
+            raise RuntimeError(
+                f"the scene script {path.name} changed since the scene was loaded (or is gone); "
+                "load it again and render, so every process runs the same script"
+            )
+        _run_script(path)
+    return Engine.from_payload(payload, **kwargs)
+
+
+def _census_ids(engine: Any, t: float = 0.0) -> tuple[str, ...]:
+    """The objects whose drawing depends on the scene's own code (ADR 0005), which render
+    workers are checked on: objects of a scene-local type, objects with updaters, and the
+    parts of either. Empty for a scene of built-in types only."""
+    from phasor.core.objects import is_builtin
+
+    if not engine.base.meta.modules:  # scene-local types and updaters are named there
+        return ()
+    state = engine.state_at(t)
+    updated = {o.id for o in engine.document.objects if o.always}
+    local: set[str] = set()
+    for o in state.objects:
+        chain, parent = [o.id], o.parent
+        while parent is not None and parent in state:
+            chain.append(parent)
+            parent = state[parent].parent
+        if any(i in updated or not is_builtin(type(state[i].impl)) for i in chain):
+            local.add(o.id)
+    return tuple(sorted(local))
+
+
+def _census_error(w: int, t: float, here: dict, msg: tuple) -> str:
+    """What a worker that draws otherwise than this process is told, object by object."""
+    there = msg[1] if msg[0] == "census" else {}
+
+    def say(c) -> str:
+        if c is None:
+            return "is missing"
+        kinds, n, _ = c
+        if not kinds or n == 0:
+            return "draws nothing"
+        return f"draws {len(kinds)} command(s), {n} vertices"
+
+    diffs = []
+    for oid in sorted(set(here) | set(there)):
+        a, b = here.get(oid), there.get(oid)
+        if a == b:
+            continue
+        if a is not None and b is not None and a[:2] == b[:2]:
+            diffs.append(f"{oid} has other params in the worker (an updater?)")
+        else:
+            diffs.append(f"{oid} {say(b)} in the worker but {say(a)} here")
+    shown = "; ".join(diffs[:6]) + (f"; and {len(diffs) - 6} more" if len(diffs) > 6 else "")
+    return (
+        f"render worker {w} does not draw what this process draws at t = {t:g} s: {shown}. "
+        "The scene's own code keeps state outside the document that a worker cannot rebuild "
+        "(a registry the scene script fills, say). Render from the scene script "
+        "(`phasor render scene.py`: workers run it too), keep that state in the object's "
+        "params or in the module meta.modules names, or render with --workers 1."
+    )
