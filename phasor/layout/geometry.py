@@ -145,6 +145,28 @@ class Coverage:
         return float(s[y1, x1] - s[y0, x1] - s[y1, x0] + s[y0, x0]) / total
 
 
+def pixel_mask(shape: tuple[int, int], reach: tuple[float, float, float, float],
+               test) -> np.ndarray:  # fmt: skip
+    """(h, w) bool: ``test(xx, yy)`` at every pixel center (``x + 0.5``, ``y + 0.5``, in
+    pixels), where ``test`` is elementwise and false wherever a pixel center lies outside
+    ``reach`` (x0, x1, y0, y1). The same mask as testing the whole frame, but only the
+    pixels within reach (and a margin wider than any rounding) are tested: a small disc in
+    a big frame costs its own size."""
+    h, w = shape
+    x0, x1, y0, y1 = reach
+    out = np.zeros((h, w), dtype=bool)
+    if not all(map(np.isfinite, reach)):
+        i0, i1, j0, j1 = 0, w, 0, h
+    else:
+        pad = 2.0 + 1e-6 * max(abs(x0), abs(x1), abs(y0), abs(y1))
+        i0, i1 = (min(max(int(v), 0), w) for v in (np.floor(x0 - pad), np.ceil(x1 + pad)))
+        j0, j1 = (min(max(int(v), 0), h) for v in (np.floor(y0 - pad), np.ceil(y1 + pad)))
+    if i1 > i0 and j1 > j0:
+        yy, xx = np.mgrid[j0:j1, i0:i1] + 0.5
+        out[j0:j1, i0:i1] = test(xx, yy)
+    return out
+
+
 def footprint(state: SceneState, obj: ObjectState, size: tuple[int, int]) -> np.ndarray:
     """(h, w) bool, row 0 = top: the pixels an object covers, worked out without a renderer.
 
@@ -171,9 +193,13 @@ def footprint(state: SceneState, obj: ObjectState, size: tuple[int, int]) -> np.
     px = cam.to_screen(obj.impl.world_bounds(state).corners(), w, h)
     (x0, y0), (x1, y1) = px.min(0), px.max(0)
     if obj.impl.semantics(state).get("kind") == "point":  # a disc, not its square box
-        yy, xx = np.mgrid[0:h, 0:w] + 0.5
         rx, ry = max((x1 - x0) / 2, 1e-9), max((y1 - y0) / 2, 1e-9)
-        return ((xx - (x0 + x1) / 2) / rx) ** 2 + ((yy - (y0 + y1) / 2) / ry) ** 2 <= 1.0
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+
+        def inside(xx, yy):
+            return ((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2 <= 1.0
+
+        return pixel_mask((h, w), (cx - rx, cx + rx, cy - ry, cy + ry), inside)
     x0, y0 = int(np.floor(x0)), int(np.floor(y0))
     x1, y1 = int(np.ceil(x1)), int(np.ceil(y1))
     mask[max(y0, 0) : max(y1, 0), max(x0, 0) : max(x1, 0)] = True

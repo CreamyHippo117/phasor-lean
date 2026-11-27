@@ -205,4 +205,5 @@ def test_a_render_worker_passes_the_field_cut_to_render_frame(monkeypatch):
     q = queue.Queue()
     scene._render_worker({}, [(0, 2)], [0.0, 0.1], (8, 8), 10.0, 0.0, 1, q, 1.0, 1, None, 0.0, 0.5)
     assert seen == [0.5, 0.5]
-    assert [q.get()[0] for _ in range(2)] == ["frame", "frame"]
+    # (a worker's first word is what the scene's own code draws: none here, so empty)
+    assert [q.get()[:2] for _ in range(3)] == [("census", {}), ("frame", 0), ("frame", 1)]

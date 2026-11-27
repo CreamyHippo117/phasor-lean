@@ -59,6 +59,13 @@ def _v7_to_v8(raw: dict[str, Any]) -> dict[str, Any]:
     return raw
 
 
+def _v8_to_v9(raw: dict[str, Any]) -> dict[str, Any]:
+    """Version 9 added the ``sound`` section (beds and cues beside the narration).
+    Older documents have no sound apart from their narration."""
+    raw.setdefault("sound", {"beds": [], "cues": []})
+    return raw
+
+
 MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     1: _v1_to_v2,
     2: _v2_to_v3,
@@ -67,6 +74,7 @@ MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     5: _v5_to_v6,
     6: _v6_to_v7,
     7: _v7_to_v8,
+    8: _v8_to_v9,
 }
 
 

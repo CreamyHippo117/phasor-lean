@@ -7,7 +7,9 @@ typing to it. A 30 Hz timer advances playback and notices edits made by an attac
 Layout: the viewport (click to select, drag a selected object to move it) above the
 timeline (markers, animated spans, the playhead: click or drag to scrub); on the right,
 tabs for the inspector (parameters, style roles, what the inspector reads), lint (click an
-issue to jump to it) and looks (switch look, pick among variants of a beat).
+issue to jump to it), looks (switch look, pick among variants of a beat), sliders, code and
+sound (music, effects, the narration, mastering, listening). Play plays the sound
+too, and the playhead follows it.
 """
 
 from __future__ import annotations
@@ -33,8 +35,12 @@ from PySide6.QtGui import (
     QTextOption,
 )
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDockWidget,
+    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -47,6 +53,8 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -182,9 +190,10 @@ def _extra_panels(window) -> list[tuple[str, QWidget]]:
 
 
 class Timeline(QWidget):
-    """Narration (with its waveform), markers, the animated spans of every parameter (one
-    lane each) and the playhead. Click or drag to scrub; drag a marker to move it; drag a span
-    to slide it, or its ends to stretch it."""
+    """Narration (with its waveform), the sound (one row per bed, one for the cues), markers,
+    the animated spans of every parameter (one lane each) and the playhead. Click or drag to
+    scrub; drag a marker to move it; drag a span to slide it, or its ends to stretch it; drag
+    a sentence, a bed or a cue to move it (a cue snaps to the nearest marker)."""
 
     scrubbed = Signal(float)
     edited = Signal(object)  # a patch result
@@ -211,7 +220,15 @@ class Timeline(QWidget):
         self.update()
 
     def _top(self) -> int:
-        return self.NARRATION if self.data.get("narration") else 0
+        return self._sound_y() - 20 + self.LANE * self._sound_rows()
+
+    def _sound_rows(self) -> int:
+        snd = self.data
+        return len(snd.get("beds", [])) + (1 if snd.get("cues") else 0)
+
+    def _sound_y(self) -> int:
+        """Where the first sound row starts: under the narration, or under the marker names."""
+        return self.NARRATION + 2 if self.data.get("narration") else 20
 
     def _x(self, t: float) -> float:
         d = max(self.data["duration"], 1e-6)
@@ -234,8 +251,12 @@ class Timeline(QWidget):
         self._hits = []
         top = self._top()
         for b in self.data.get("narration", []):  # spoken blocks, with their loudness
-            x0, x1 = self._x(b["start"]), self._x(b["start"] + b["duration"])
+            start = b["start"]
+            if self._drag and self._drag[0] == "sentence" and self._drag[1] == b["index"]:
+                start = self._drag[-1]
+            x0, x1 = self._x(start), self._x(start + b["duration"])
             box = QRectF(x0, 16, max(x1 - x0, 3), self.NARRATION - 18)
+            self._hits.append((box, "sentence", (b["index"], start)))
             p.fillRect(box, QColor(80, 120, 90, 90))
             if b.get("audio"):
                 bins = max(int(box.width() / 2), 2)
@@ -249,7 +270,9 @@ class Timeline(QWidget):
             p.drawText(box.adjusted(2, 0, -2, 0), Qt.AlignmentFlag.AlignVCenter,
                        p.fontMetrics().elidedText(b["text"], Qt.TextElideMode.ElideRight,
                                                   int(box.width()) - 4))  # fmt: skip
+        self._paint_sound(p)
         p.fillRect(QRectF(0, 0, self.LABELS - 4, self.height()), QColor("#07080b"))
+        self._paint_sound_names(p)
         for k, (path, spans) in enumerate(self.data["lanes"].items()):
             y = 20 + top + k * self.LANE
             p.setPen(QColor("#6c7891"))
@@ -277,14 +300,59 @@ class Timeline(QWidget):
         p.drawLine(QPointF(x, 0), QPointF(x, self.height()))
         p.end()
 
+    def _paint_sound(self, p: QPainter) -> None:
+        snd = self.data
+        y = self._sound_y()
+        for bed in snd.get("beds", []):
+            t0, t1 = bed["start"], bed["end"]
+            if self._drag and self._drag[0] == "bed" and self._drag[1] == bed["id"]:
+                t0, t1 = self._drag[-1], self._drag[-1] + (t1 - t0)
+            r = QRectF(self._x(t0), y + 2, max(self._x(t1) - self._x(t0), 3), self.LANE - 4)
+            p.fillRect(r, QColor(122, 215, 255, 70))
+            p.setPen(QColor("#7ad7ff"))
+            p.drawText(r.adjusted(3, 0, -2, 0), Qt.AlignmentFlag.AlignVCenter,
+                       p.fontMetrics().elidedText(bed["id"], Qt.TextElideMode.ElideRight,
+                                                  max(int(r.width()) - 4, 0)))  # fmt: skip
+            self._hits.append((r, "bed", (bed["id"], t0)))
+            y += self.LANE
+        p.setPen(QPen(QColor("#ff8fd0"), 1))
+        for cue in snd.get("cues", []):
+            t = cue["t"]
+            if self._drag and self._drag[0] == "cue" and self._drag[1] == cue["id"]:
+                t = self._drag[-1]
+            x, cy, h = self._x(t), y + self.LANE / 2, self.LANE / 2 - 2
+            p.setBrush(QColor("#ff8fd0"))
+            p.drawPolygon([QPointF(x, cy - h), QPointF(x + h, cy), QPointF(x, cy + h),
+                           QPointF(x - h, cy)])  # fmt: skip
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            self._hits.append((QRectF(x - h - 2, cy - h - 2, 2 * h + 4, 2 * h + 4), "cue",
+                               (cue["id"], t)))  # fmt: skip
+
+    def _paint_sound_names(self, p: QPainter) -> None:
+        snd = self.data
+        y = self._sound_y()
+        names = [("music: " + b["id"], "#7ad7ff") for b in snd.get("beds", [])]
+        if snd.get("cues"):
+            names.append(("effects", "#ff8fd0"))
+        for text, color in names:
+            p.setPen(QColor(color))
+            p.drawText(QRectF(6, y, self.LABELS - 12, self.LANE), Qt.AlignmentFlag.AlignVCenter,
+                       p.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight,
+                                                  self.LABELS - 12))  # fmt: skip
+            y += self.LANE
+
     def _hit(self, pos: QPointF):
-        for rect, kind, data in self._hits:  # markers first (thin, on top of spans)
-            if kind == "marker" and rect.contains(pos):
-                return kind, data
+        for want in ("marker", "cue"):  # thin things first, on top of spans and bars
+            for rect, kind, data in self._hits:
+                if kind == want and rect.contains(pos):
+                    return kind, data
         for rect, kind, data in self._hits:
             if kind == "span" and rect.adjusted(-self.EDGE // 2, 0, self.EDGE // 2, 0).contains(
                 pos
             ):
+                return kind, data
+        for rect, kind, data in self._hits:
+            if kind in ("bed", "sentence") and rect.contains(pos):
                 return kind, data
         return None
 
@@ -293,6 +361,9 @@ class Timeline(QWidget):
         if hit and hit[0] == "marker":
             name, t = hit[1]
             self._drag = ("marker", name, t, t)
+        elif hit and hit[0] in ("cue", "bed", "sentence"):
+            key, t = hit[1]  # (what, which, where it grabbed, where it started, where it is)
+            self._drag = (hit[0], key, self._t(ev.position().x()), t, t)
         elif hit:
             path, i, t0, t1 = hit[1]
             x = ev.position().x()
@@ -315,6 +386,9 @@ class Timeline(QWidget):
         t = max(0.0, self._t(ev.position().x()))
         if d[0] == "marker":
             self._drag = ("marker", d[1], d[2], t)
+        elif d[0] in ("cue", "bed", "sentence"):
+            kind, key, grab, start, _cur = d
+            self._drag = (kind, key, grab, start, max(0.0, start + t - grab))
         else:
             _, path, i, mode, grab, (o0, o1), _cur = d
             dt = t - grab
@@ -330,6 +404,10 @@ class Timeline(QWidget):
             return
         if d[0] == "marker" and abs(d[3] - d[2]) > 1e-3:
             self.edited.emit(self.ed.move_marker(d[1], d[3]))
+        elif d[0] in ("cue", "bed", "sentence") and abs(d[4] - d[3]) > 1e-3:
+            move = {"cue": self.ed.move_cue, "bed": self.ed.move_bed,
+                    "sentence": self.ed.move_sentence}[d[0]]  # fmt: skip
+            self.edited.emit(move(d[1], d[4]))
         elif d[0] == "span" and max(abs(d[6][0] - d[5][0]), abs(d[6][1] - d[5][1])) > 1e-3:
             self.edited.emit(self.ed.retime_segment(d[1], d[2], *d[6]))
         self.update()
@@ -553,6 +631,267 @@ class ControlsPanel(QWidget):
         self.moved.emit()
 
 
+class NarrateDialog(QDialog):
+    """Write the narration: one sentence per line, ``[[name]]`` where something should
+    happen (the timeline gets a marker there), and pick a voice."""
+
+    def __init__(self, parent: QWidget | None, script: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Narration")
+        self.text = QPlainTextEdit(script)
+        self.text.setPlaceholderText("Here is a pole [[pole_appears]].\n"
+                                     "Watch it move [[pole_moves]] to the right.")  # fmt: skip
+        self.voice = QComboBox()
+        self.voice.addItems(["auto", "espeak", "estimate"])
+        self.voice.setToolTip("auto: espeak-ng when installed, otherwise timing only "
+                              "(no audio); estimate: timing only")  # fmt: skip
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                                   | QDialogButtonBox.StandardButton.Cancel)  # fmt: skip
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("One sentence per line; [[name]] marks a moment."))
+        lay.addWidget(self.text)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Voice"))
+        row.addWidget(self.voice, 1)
+        lay.addLayout(row)
+        lay.addWidget(buttons)
+        self.resize(560, 320)
+
+
+class SoundPanel(QWidget):
+    """The scene's sound: the voice, every bed and cue with its level and gain,
+    mute and solo for listening, and the ways to add to it: music or ambience from a file,
+    an effect at the playhead, the narration. "Master" turns down whatever covers the voice
+    or clips. Drag beds, cues and sentences on the timeline to move them."""
+
+    changed = Signal(object)
+    COLUMNS = ("Lane", "LUFS", "vs voice", "Mute", "Solo", "")
+
+    def __init__(self, editor: Editor) -> None:
+        super().__init__()
+        self.ed = editor
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        self.issues = QLabel("")
+        self.issues.setWordWrap(True)
+        self.issues.setStyleSheet("color: #ffb454;")
+        self.table = QTableWidget(0, len(self.COLUMNS))
+        self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        for col, width in enumerate((130, 48, 72, 40, 40, 28)):
+            self.table.setColumnWidth(col, width)
+        self.music = QPushButton("Add music...")
+        self.music.setToolTip("Your own music or ambience (WAV; OGG, FLAC, MP3 with the sound "
+                              "extra), copied next to the scene, looped under it")  # fmt: skip
+        self.music.clicked.connect(lambda: self.add_music())
+        self.effect = QComboBox()
+        from phasor.core.schema import BUILTIN_SOUNDS
+
+        self.effect.addItems([*BUILTIN_SOUNDS, "a file..."])
+        add_cue = QPushButton("Add effect at playhead")
+        add_cue.clicked.connect(lambda: self.add_effect())
+        narrate = QPushButton("Narrate (synthetic)...")
+        narrate.setToolTip("Type the script and let a synthetic voice speak it")
+        narrate.clicked.connect(lambda: self.narrate())
+        self.voice_button = QPushButton("Add voice...")
+        self.voice_button.setToolTip("A recording of your voice, at the playhead: levelled "
+                                     "to the voice level, music ducks under it")  # fmt: skip
+        self.voice_button.clicked.connect(lambda: self.add_voice())
+        mark = QPushButton("Marker at playhead")
+        mark.setToolTip("Name a moment (a word in your recording) to tie motion and effects "
+                        "to; inside a recording it moves with it")  # fmt: skip
+        mark.clicked.connect(lambda: self.add_marker())
+        self.master_button = QPushButton("Master")
+        self.master_button.setToolTip("Turn down whatever covers the voice or clips, then "
+                                      "check again (each round can be undone)")  # fmt: skip
+        self.master_button.clicked.connect(lambda: self.changed.emit(self.ed.master()))
+        levels = QPushButton("Show levels")
+        levels.clicked.connect(self.show_levels)
+        from phasor.gui.audio import backend
+
+        self.listen = QCheckBox("Play with sound")
+        self.listen.setChecked(backend() is not None)
+        self.listen.setEnabled(backend() is not None)
+        if backend() is None:
+            self.listen.setToolTip("No way to play sound found on this system (Linux: install "
+                                   "pulseaudio-utils or alsa-utils)")  # fmt: skip
+        self.picture = QLabel()
+        self.picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay = QVBoxLayout(self)
+        lay.addWidget(self.status)
+        lay.addWidget(self.issues)
+        lay.addWidget(self.table, 1)
+        row = QHBoxLayout()
+        row.addWidget(self.voice_button)
+        row.addWidget(self.music)
+        lay.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(mark)
+        row.addWidget(narrate)
+        lay.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(self.effect)
+        row.addWidget(add_cue)
+        lay.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(self.master_button)
+        row.addWidget(levels)
+        row.addWidget(self.listen)
+        lay.addLayout(row)
+        lay.addWidget(self.picture)
+        self.data: dict[str, Any] = {}
+        self.gains: dict[str, float] = {}  # what each bed's and cue's spin box was set to
+
+    def refresh(self) -> None:
+        try:
+            self.data = d = self.ed.sound()
+        except ToolError as e:
+            self.status.setText(str(e))
+            return
+        if d.get("scripted"):
+            self.status.setText("This scene is built by a script. Your first sound edit "
+                                "makes an editable copy beside it; the script stays.")  # fmt: skip
+        elif not d.get("lanes"):
+            self.status.setText("No sound yet: add your voice, music or an effect.")
+        else:
+            under = [u for x in d["lanes"] for u in x.get("under_voice_lu", []) if u is not None]
+            parts = [f"mix {d.get('loudness')} LUFS, true peak {d.get('true_peak_dbtp')} dBTP"]
+            if under:
+                parts.append(f"music at least {min(under):g} dB under the voice")
+            self.status.setText("; ".join(parts))
+        self.issues.setText("\n".join(i["message"] for i in d.get("issues", [])))
+        self.table.setRowCount(0)
+        defaults = d.get("defaults", {})
+        gains = {x["id"]: (x["gain"] if x["gain"] is not None else defaults.get(kind, 0.0))
+                 for kind, items in (("bed", d.get("beds", [])), ("cue", d.get("cues", [])))
+                 for x in items}  # fmt: skip
+        self.gains = gains
+        for lane in d.get("lanes", []):
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            name = QTableWidgetItem(f"{lane['id']} ({lane['kind']})")
+            name.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(r, 0, name)
+            level = QTableWidgetItem("" if lane["loudness"] is None else f"{lane['loudness']:g}")
+            level.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(r, 1, level)
+            if lane["id"] in gains:
+                spin = QDoubleSpinBox()
+                spin.setRange(-60.0, 6.0)
+                spin.setToolTip("loudness in LU relative to the voice")
+                spin.setSingleStep(1.0)
+                spin.setValue(gains[lane["id"]])
+                spin.editingFinished.connect(
+                    lambda s=spin, i=lane["id"]: self._gain(i, s.value()))  # fmt: skip
+                self.table.setCellWidget(r, 2, spin)
+            switches = ((3, lane["id"] in d.get("muted", []), self.ed.toggle_mute),
+                        (4, lane["id"] in d.get("solo", []), self.ed.toggle_solo))  # fmt: skip
+            for col, on, flip in switches:
+                box = QCheckBox()
+                box.setChecked(on)
+                box.toggled.connect(lambda _=False, i=lane["id"], f=flip: f(i))
+                cell = QWidget()
+                centre = QHBoxLayout(cell)
+                centre.setContentsMargins(0, 0, 0, 0)
+                centre.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                centre.addWidget(box)
+                self.table.setCellWidget(r, col, cell)
+            if lane["id"] in gains:
+                drop = QPushButton("x")
+                drop.setToolTip(f"remove {lane['id']}")
+                drop.clicked.connect(
+                    lambda _=False, i=lane["id"]: self.changed.emit(self.ed.remove_sound(i))
+                )
+                self.table.setCellWidget(r, 5, drop)
+        self._voice_rows()
+        self.master_button.setEnabled(bool(d.get("beds") or d.get("cues")))
+
+    def _voice_rows(self) -> None:
+        """One row per recorded or spoken sentence, under the lanes: what it says, where,
+        and a button to take it out."""
+        n = self.ed.engine.document.narration
+        for k, b in enumerate(n.blocks if n else ()):
+            if not b.text:
+                continue
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            item = QTableWidgetItem(f"  {b.text}")
+            item.setToolTip(f"{b.audio or 'no audio'}, {b.start:g} s, {b.duration:g} s long")
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(r, 0, item)
+            at = QTableWidgetItem(f"{b.start:.1f}s")
+            at.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(r, 1, at)
+            drop = QPushButton("x")
+            drop.setToolTip("take this sentence out")
+            drop.clicked.connect(lambda _=False, i=k: self.changed.emit(self.ed.remove_sentence(i)))
+            self.table.setCellWidget(r, 5, drop)
+
+    def add_voice(self, path: str | None = None, text: str | None = None) -> None:
+        path = path or self._pick_file("A recording of your voice")
+        if not path:
+            return
+        if text is None:
+            from PySide6.QtWidgets import QInputDialog
+
+            text, ok = QInputDialog.getText(self, "Voice", "What it says (optional):")
+            if not ok:
+                return
+        self.changed.emit(self.ed.add_voice(path, text=text))
+
+    def add_marker(self, name: str | None = None) -> None:
+        if name is None:
+            from PySide6.QtWidgets import QInputDialog
+
+            name, ok = QInputDialog.getText(self, "Marker", "Name (letters, digits, _):")
+            if not ok or not name:
+                return
+        self.changed.emit(self.ed.add_marker(name.strip()))
+
+    def _gain(self, item_id: str, value: float) -> None:
+        if abs(value - self.gains.get(item_id, value)) > 1e-9:
+            self.changed.emit(self.ed.update_sound(item_id, gain=round(value, 1)))
+
+    def _pick_file(self, title: str) -> str | None:
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(self, title, str(self.ed.ws.root),
+                                              "Sound (*.wav *.ogg *.flac *.mp3)")  # fmt: skip
+        return path or None
+
+    def add_music(self, path: str | None = None) -> None:
+        path = path or self._pick_file("Music or ambience")
+        if path:
+            self.changed.emit(self.ed.add_bed(path))
+
+    def add_effect(self, path: str | None = None) -> None:
+        name = self.effect.currentText()
+        if name == "a file...":
+            name = path or self._pick_file("A sound effect")
+            if not name:
+                return
+        self.changed.emit(self.ed.add_cue(name))
+
+    def narrate(self, script: str | None = None, voice: str = "auto") -> None:
+        if script is None:
+            n = self.ed.engine.document.narration
+            dialog = NarrateDialog(self, n.script if n else "")
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            script, voice = dialog.text.toPlainText(), dialog.voice.currentText()
+        self.changed.emit(self.ed.narrate(script, voice=voice))
+
+    def show_levels(self) -> None:
+        path = self.ed.sound_picture()
+        if path:
+            width = max(self.width() - 20, 200)
+            smooth = Qt.TransformationMode.SmoothTransformation
+            self.picture.setPixmap(QPixmap(path).scaledToWidth(width, smooth))
+
+
 class PythonHighlighter(QSyntaxHighlighter):
     """Colors for the code view: keywords, strings, numbers, comments, decorators and the
     names a scene script uses (Scene, expr, the object classes)."""
@@ -675,7 +1014,12 @@ class EditorWindow(QMainWindow):
         self.looks = LooksPanel(editor)
         self.controls = ControlsPanel(editor)
         self.code = CodePanel(editor)
+        self.sound = SoundPanel(editor)
         self.activity = ActivityDock(editor)
+        from phasor.gui.audio import Player
+
+        self.player = Player()
+        self._heard_from: tuple[float, float] | None = None  # (clock, scene time) of Play
         self.readout = QLabel("")
         self.statusBar().addPermanentWidget(self.readout)
         self._hover: tuple | None = None
@@ -692,6 +1036,7 @@ class EditorWindow(QMainWindow):
         tabs.addTab(self.looks, "Looks")
         tabs.addTab(self.controls, "Sliders")
         tabs.addTab(self.code, "Code")
+        tabs.addTab(self.sound, "Sound")
         self.panels = _extra_panels(self)
         for title, widget in self.panels:
             tabs.addTab(widget, title)
@@ -721,6 +1066,7 @@ class EditorWindow(QMainWindow):
         self.inspector.edited.connect(self._report)
         self.lint.picked.connect(self._jump)
         self.looks.changed.connect(self._report)
+        self.sound.changed.connect(self._report)
         self.statusBar().showMessage(attach_hint or "Ready")
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
@@ -758,6 +1104,25 @@ class EditorWindow(QMainWindow):
         self.playing = not self.playing
         if self.playing and self.ed.t >= self.ed.engine.duration:
             self.ed.set_time(0.0)
+        self._sound_follows()
+
+    def _sound_follows(self) -> None:
+        """Start (or restart, after a scrub) the scene's sound from the playhead while
+        playing with sound on; stop it otherwise. The playhead then follows the clock, so
+        picture and sound stay together."""
+        import time
+
+        self.player.stop()
+        self._heard_from = None
+        if not (self.playing and self.sound.listen.isChecked()):
+            return
+        try:
+            path = self.ed.listen_file()
+        except Exception as e:  # a missing narration clip: play the picture without sound
+            self.statusBar().showMessage(f"No sound: {e}", 6000)
+            return
+        if path is not None and self.player.play(path):
+            self._heard_from = (time.monotonic(), self.ed.t)
 
     def _turn(self, dx: float, dy: float, size: tuple, pan: bool) -> None:
         self._report(self.ed.drag_camera(dx, dy, size, pan))
@@ -783,7 +1148,16 @@ class EditorWindow(QMainWindow):
             self._preview_dirty = False
             self.viewport.refresh()
         if self.playing:
-            self.playing = self.ed.play_step(TICK_MS / 1000)
+            if self._heard_from is not None:
+                import time
+
+                clock, t0 = self._heard_from
+                self.ed.set_time(t0 + time.monotonic() - clock)
+                self.playing = self.ed.t < self.ed.engine.duration
+            else:
+                self.playing = self.ed.play_step(TICK_MS / 1000)
+            if not self.playing:
+                self._sound_follows()
             self.viewport.refresh()
             self.timeline.update()
         if self.ed.changed():  # an edit here or by an attached AI
@@ -791,6 +1165,8 @@ class EditorWindow(QMainWindow):
 
     def _scrub(self, t: float) -> None:
         self.ed.set_time(t)
+        if self.playing:
+            self._sound_follows()
         self.viewport.refresh()
         self.timeline.update()
         self.inspector.refresh()
@@ -817,6 +1193,10 @@ class EditorWindow(QMainWindow):
             self.statusBar().showMessage(f"Saved {result['saved']}", 4000)
 
     def refresh_all(self) -> None:
+        if self.ed.copied and self.ed.copied != getattr(self, "_copy_told", None):
+            self._copy_told = self.ed.copied
+            self.statusBar().showMessage(f"Editing a copy: {self.ed.copied} (the script is "
+                                         "unchanged)", 10000)  # fmt: skip
         self.viewport.refresh()
         self.timeline.refresh()
         self.inspector.refresh()
@@ -824,10 +1204,12 @@ class EditorWindow(QMainWindow):
         self.looks.refresh()
         self.controls.refresh()
         self.code.refresh()
+        self.sound.refresh()
         self.activity.refresh()
 
     def closeEvent(self, ev) -> None:
         self.timer.stop()
+        self.player.stop()
         super().closeEvent(ev)
 
 
@@ -841,6 +1223,12 @@ QPushButton:hover, QToolButton:hover { background: #242b40; }
 QTabBar::tab { background: #141822; padding: 5px 12px; }
 QTabBar::tab:selected { background: #1f2535; color: #ffb454; }
 QStatusBar { color: #8a93a8; }
+QCheckBox::indicator, QTableWidget QCheckBox::indicator {
+    width: 12px; height: 12px; border: 1px solid #5a6478; background: #161a23;
+}
+QCheckBox::indicator:checked { background: #ffb454; border-color: #ffb454; }
+QHeaderView::section { background: #141822; color: #8a93a8; border: 0; padding: 3px; }
+QTableWidget { gridline-color: #1d2230; }
 """  # the house look is dark, always (STYLE.md); Qt's default is light
 
 

@@ -3,6 +3,8 @@ markers and labels on 3D curves, checked through the inspector as an AI would.""
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -73,7 +75,8 @@ def test_a_focus_pull_at_a_marker_starts_from_the_solved_camera():
     prev = _camera(e, 0.0)
     for t in np.arange(0.05, 4.0, 0.05):
         cur = _camera(e, float(t))
-        assert np.abs(cur[2:] - prev[2:]).max() < 0.6, (t, prev, cur)
+        assert np.abs(cur[3:] - prev[3:]).max() < 0.6, (t, prev, cur)
+        assert abs(math.log(cur[2] / prev[2])) < 0.2, (t, prev, cur)  # a zoom moves by factors
         prev = cur
     assert _on_screen(e, 4.0, ["ball"])["ball"] > 0.98
 

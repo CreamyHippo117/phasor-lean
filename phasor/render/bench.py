@@ -16,6 +16,7 @@ from phasor.core.color import phase_lut
 from phasor.render import gpu
 from phasor.render.cpu import threads as cpu_threads
 from phasor.render.gpu import ComplexFunction, Tile
+from phasor.render.gpu.kernels.heat import Recipe
 from phasor.render.gpu.registry import active_backend
 
 
@@ -77,7 +78,27 @@ def _cases(w: int, h: int) -> dict[str, dict[str, Any]]:
             "omega_t": 2.0,
             "edge": 0.3,
         },
+        # the prism heat map (smooth, 8 isolines, hue wheel, glow weight, edge fade) of a
+        # 96 x 96 grid, and of a field already computed per pixel (the wave pictures)
+        "heat_shade": {
+            "grid": 0.5 + 0.5 * np.sin(np.linspace(0, 9, 96))[:, None]
+            * np.cos(np.linspace(0, 7, 96))[None, :],
+            "how": "smooth",
+            **_prism_heat(Recipe(colour="wheel", lut=phase_lut(), hue_cycles=1.6,
+                                 weight="value")),
+        },
+        "heat_shade:wave": {
+            "image": image,
+            **_prism_heat(Recipe(transform="wave", gain=0.5, level="signed", colour="wheel",
+                                 lut=phase_lut(), hue_cycles=1.6, hue_of="inverse",
+                                 weight="abs")),
+        },
     }  # fmt: skip
+
+
+def _prism_heat(recipe: Recipe) -> dict[str, Any]:
+    return {"center": (4.0, 2.25), "height": 4.5, "size": (8.0, 4.5), "recipe": recipe,
+            "isolines": 8, "ambient": 0.0, "fade": 0.1, "contrast": 2.0}  # fmt: skip
 
 
 def run_bench(width: int = 1920, height: int = 1080, repeats: int = 3) -> dict[str, Any]:

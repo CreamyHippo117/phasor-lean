@@ -21,12 +21,15 @@ from typing import Any
 
 import numpy as np
 
+from phasor.core import unfold_math
 from phasor.core.schema import ExprSpec, MarkerRef, TimeRef
 from phasor.core.state import SceneState
 from phasor.time.compile import Compiled, evaluate
+from phasor.time.easing import LOG
 from phasor.time.tracks import ResolvedTrack
 
 FOCUS_MARGIN = 0.15  # focus_pull leaves this share of the frame around the object
+ZOOM_PARAMS = ("height", "distance")  # camera scales: a verb moves them by factors (log:)
 
 
 class VerbError(ValueError):
@@ -92,8 +95,17 @@ class Verbs:
         spec = self.motion[timing or verb]
         t0 = shift(self.at, delay)
         t1 = shift(self.at, delay + spec["duration"])
-        seg = {"t0": _ref(t0), "t1": _ref(t1), "to": to, "ease": spec["ease"], "verb": verb}
+        seg = {"t0": _ref(t0), "t1": _ref(t1), "to": to, "ease": self._ease(path, spec["ease"]),
+               "verb": verb}  # fmt: skip
         return {"op": "add_segment", "path": path, "segment": seg}, delay + spec["duration"]
+
+    def _ease(self, path: str, ease: str) -> str:
+        """A camera's zoom (``height``, ``distance``) moves by factors: ``log:`` + the curve,
+        so a 600x dive looks even. Everything else eases as the theme says."""
+        target, _, name = path.rpartition(".")
+        if name in ZOOM_PARAMS and self.c.doc.camera(target) and not ease.startswith(LOG):
+            return LOG + ease
+        return ease
 
     def _each(self, ids: Sequence[str], verb: str, make) -> Motion:
         if not ids:
@@ -487,6 +499,141 @@ class Verbs:
             ops.append({"op": "add_constraint", "rule": f"{readout} near {target}"})
             ops.append(self._instant(f"{readout}.opacity", 1.0, "sweep", 0.0))
         return Motion((*ops, seg), done)
+
+    def unfold(self, room: str, ray: str, flips: int = 5, speed: float | None = None,
+               index: int | None = None) -> Motion:  # fmt: skip
+        """A ray bouncing in a room, shown as a straight line through mirror rooms: as the
+        ray reaches each wall, a mirror copy of the room swings over that wall like a page
+        and the ray carries straight on into it. The ray is a ``Line`` (its first point is
+        where it starts, its second the way it goes) or ray ``index`` of an ``ac.SoundRays``
+        (drawn as a new line, ``<ray>.unfolded_<index>``). ``room`` is a box (``ac.Room``, a
+        box ``ac.Room3D``, anything whose bounds are the room: a flat one is 2D), a convex
+        polygon (a closed ``Line``, an ``algebra.Polygon``: 2D) or a convex mesh
+        ``ac.Room3D``. ``flips`` copies are made, each a ``HingedCopy``, the children
+        ``<room>.mirror_<name>``: for a box, named by place (``mirror_e2_n1``: two rooms
+        east, one north), otherwise by the walls crossed (``mirror_b_a_c``; walls ``a``,
+        ``b``, ... in the room's order; ``core/unfold_math.py``). The ray runs straight to
+        the far wall of the last copy at ``speed`` world units a second (default: one wall
+        per flip on average); each flip takes the theme's ``unfold`` time and lands as the
+        ray arrives. At a corner (several walls at once) the flips follow one another."""
+        verb = "unfold"
+        obj = self._object(room)
+        if obj.type == "hinged_copy" or obj.layer == "overlay":
+            raise VerbError(f"unfold needs a room in the world; {room!r} is a {obj.type}")
+        start, direction, line = self._unfold_ray(room, ray, index)
+        flat = self.c.doc.camera(self.c.doc.timeline.camera).kind != "orbit"
+        if flat and abs(direction[2]) > 1e-12:
+            raise VerbError("in 2D the ray must stay in the plane: give its points one z")
+        if not 1 <= flips <= unfold_math.MAX_FLIPS:
+            raise VerbError(f"flips must be 1 to {unfold_math.MAX_FLIPS}")
+        shape = self._unfold_room(room, obj)
+        try:
+            if isinstance(shape, unfold_math.Polytope):
+                u = unfold_math.room_unfold(shape, start, direction, flips)
+            else:
+                u = unfold_math.box_unfold(shape.lo, shape.hi, start, direction, flips)
+        except ValueError as e:
+            raise VerbError(f"unfold: {e}") from None
+        spec = self.motion["unfold"]
+        dur = spec["duration"]
+        last = u.crossings[-1].distance
+        if speed is None:
+            speed = max(last, 1e-9) / len(u.crossings) / dur
+        if speed <= 0:
+            raise VerbError("unfold needs a positive speed")
+        lead = max(0.0, dur - u.crossings[0].distance / speed)  # the first page has time
+        straight = [list(u.start), list(u.end_point)]
+        ops: list[dict[str, Any]] = []
+        if line == ray:
+            ops.append({"op": "set_param", "path": f"{ray}.points", "value": straight})
+            if self._starts_hidden(f"{ray}.progress"):
+                ops.append({"op": "set_param", "path": f"{ray}.progress", "value": 0.0})
+        else:  # one of a SoundRays' rays: drawn as a line of its own
+            ops.append({"op": "add_object", "object": {
+                "id": line, "type": "line", "params": {"points": straight, "progress": 0.0},
+                "style": {"glow": "strong", "stroke": "bold", "color": "highlight"}}})  # fmt: skip
+        done = lead + u.end / speed
+        ops.append(self._span(f"{line}.progress", 1.0, verb, lead, done, "linear"))
+        arrive = [lead + c.distance / speed for c in u.crossings]
+        windows = _flip_windows(arrive, dur, 1e-9 * max(1.0, done))
+        for crossing, chain, (t0, t1) in zip(u.crossings, u.chains(), windows, strict=True):
+            copy = f"{room}.mirror_{crossing.name}"
+            if copy in self.state or self.c.doc.object(copy) is not None:
+                raise VerbError(f"{copy!r} is already in the scene; unfold each room once")
+            hinges = [[list(x) if isinstance(x, tuple) else x for x in h.as_params()]
+                      for h in chain]  # fmt: skip
+            ops.append({"op": "add_object", "object": {"id": copy, "type": "hinged_copy",
+                        "params": {"source": room, "hinges": hinges, "turn": 0.0,
+                                   "opacity": 0.0}}})  # fmt: skip
+            ops.append(self._instant(f"{copy}.opacity", 1.0, verb, t0))
+            ops.append(self._span(f"{copy}.turn", 1.0, verb, t0, t1, spec["ease"]))
+        return Motion(tuple(ops), done)
+
+    def _unfold_ray(self, room: str, ray: str, index: int | None):
+        """Where the ray starts, the way it goes, and the id of the line that draws it."""
+        obj = self._of_type(ray, "unfold", "line", "sound_rays")
+        if obj.type == "line":
+            if index is not None:
+                raise VerbError(f"index picks one ray of a SoundRays; {ray!r} is a line")
+            path = f"{ray}.points"
+            if not self._starts_hidden(path) or isinstance(self._base(path), ExprSpec):
+                raise VerbError(f"unfold needs {ray!r}'s points unanimated before it")
+            pts = np.asarray(obj.params.points, dtype=np.float64)
+            return pts[0], pts[1] - pts[0], ray
+        if index is None:
+            raise VerbError(f"unfold needs index= to pick one of {ray!r}'s rays")
+        if obj.params.room != room:
+            raise VerbError(f"{ray!r} bounces in {obj.params.room!r}; unfold that room")
+        paths = obj.impl.paths(self.state)
+        if paths is None:
+            raise VerbError(f"{ray!r} has no room to bounce in")
+        if not 0 <= index < len(paths["dirs"]):
+            raise VerbError(f"{ray!r} has rays 0 to {len(paths['dirs']) - 1}, not {index}")
+        line = f"{ray}.unfolded_{index}"
+        if line in self.state or self.c.doc.object(line) is not None:
+            raise VerbError(f"{line!r} is already in the scene; unfold each ray once")
+        return np.asarray(obj.params.source, dtype=np.float64), paths["dirs"][index], line
+
+    def _unfold_room(self, room: str, obj):
+        """The room as a convex ``unfold_math.Polytope``, or as a box (its bounds)."""
+        if obj.type == "room3d":  # a box or a mesh
+            g = obj.impl.geometry(self.state)
+            if g is None:
+                raise VerbError(f"unfold: {room!r}'s mesh file is missing")
+            if g.box is None:
+                try:
+                    return unfold_math.polyhedron(g.vertices, g.triangles)
+                except ValueError as e:
+                    raise VerbError(f"unfold needs a box room or a convex one; {room!r} is a "
+                                    f"mesh and {e}") from None  # fmt: skip
+        corners = obj.impl.features(self.state).get("vertices")
+        if corners is None and obj.type == "line":
+            pts = np.asarray(obj.params.points, dtype=np.float64)
+            if len(pts) >= 4 and np.allclose(pts[0], pts[-1]):  # a closed outline
+                corners = pts
+        if corners is not None:
+            try:
+                return unfold_math.polygon(corners)
+            except ValueError as e:
+                raise VerbError(f"unfold needs a box room or a convex one; {room!r}: {e}") from None
+        return obj.impl.world_bounds(self.state)
+
+
+def _flip_windows(arrive: list[float], dur: float, tol: float) -> list[tuple[float, float]]:
+    """When each flip turns (seconds after the anchor): the theme's time, landing as the ray
+    arrives. Flips the ray reaches at once (a corner) follow one another, each starting as
+    the one before lands: together they take the time since the last arrival or the
+    theme's time, whichever is longer (each at most the theme's time)."""
+    out: list[tuple[float, float]] = []
+    prev, k = 0.0, 0
+    while k < len(arrive):
+        t, m = arrive[k], 1
+        while k + m < len(arrive) and arrive[k + m] - t <= tol:
+            m += 1
+        w = dur if m == 1 else min(dur, max(t - prev, dur) / m)
+        out += [(t - (m - j) * w, t - (m - 1 - j) * w) for j in range(m)]
+        prev, k = t, k + m
+    return out
 
 
 def _resample(points: np.ndarray, n: int) -> np.ndarray:

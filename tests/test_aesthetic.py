@@ -35,6 +35,7 @@ def test_aesthetic_rules_are_off_unless_asked():
 def test_focal_point_wants_exactly_one_highlight(passes):
     s = _base(passes)
     s.add(Dot(id="a", pos=(-1, 0), r=0.3, style={"color": "secondary"}))
+    s.add(Dot(id="z", pos=(0, -1), r=0.3, style={"color": "secondary"}))
     s.marker("beat", 1.0)
     assert "focal_point" in _codes(s.engine)  # nothing highlighted
     assert "nothing is highlighted" in _codes(s.engine)["focal_point"].message
@@ -46,29 +47,59 @@ def test_focal_point_wants_exactly_one_highlight(passes):
 
 
 @pytest.mark.parametrize("passes", MODES)
-def test_color_restraint_counts_hues_and_exempts_phase_coloring(passes):
+def test_focal_point_is_a_lone_object_whether_or_not_it_is_highlighted(passes):
     s = _base(passes)
-    for k, color in enumerate(("highlight", "secondary", "danger", "primary")):
-        s.add(Dot(id=f"d{k}", pos=(k - 2, 0), r=0.2, style={"color": color}))
+    s.add(Dot(id="a", pos=(0, 0), r=1.2, style={"color": "secondary"}))
     s.marker("beat", 1.0)
-    assert "color_restraint" not in _codes(s.engine)  # 3 saturated hues (primary is gray)
-    s.add(Dot(id="extra", pos=(0, 2), r=0.2, style={"color": "highlight"}))
-    assert "color_restraint" not in _codes(s.engine)  # same hue as another: still 3
-    s2 = _base(passes)
-    s2.add(cx.DomainColoring(id="plane", function="z"))  # the full wheel: hue is phase
-    s2.add(Dot(id="a", pos=(0, 0), style={"color": "highlight"}))
-    s2.marker("beat", 1.0)
-    assert "color_restraint" not in _codes(s2.engine)
-    s3 = _base(passes)
-    s3.add(cx.Fractal(id="f", preset="classic"))  # a ramp through three hues ...
-    s3.add(cx.RiemannSurface(id="r", preset="soft_glass"))  # ... and another three-hue palette
-    s3.marker("beat", 1.0)
-    assert "color_restraint" in _codes(s3.engine)  # four hues together
-    s4 = _base(passes)
-    s4.add(cx.Fractal(id="f", preset="ocean"))  # a restrained two-tone ramp
-    s4.add(Dot(id="a", pos=(0, 0), style={"color": "highlight"}))
-    s4.marker("beat", 1.0)
-    assert "color_restraint" not in _codes(s4.engine)
+    assert "focal_point" not in _codes(s.engine)  # one animation: it is the focal point
+    s.add(Text(id="a.label", text="a"))
+    assert "focal_point" not in _codes(s.engine)  # labels do not count
+    s.add(Dot(id="b", pos=(2, 0), r=0.5, style={"color": "secondary"}))
+    assert "focal_point" in _codes(s.engine)  # two objects, no highlight: still reported
+
+
+@pytest.fixture
+def two_hues(monkeypatch):
+    """A theme that allows two saturated flat-paint hues (the stock ones allow three or more)."""
+    from phasor.style.theme import load_theme
+    from phasor.time import compile as compile_
+
+    def tight(name):
+        theme = load_theme(name)
+        theme.lint["hues"] = 2
+        return theme
+
+    monkeypatch.setattr(compile_, "load_theme", tight)
+
+
+def _paint_dots(s, *colors):
+    for k, color in enumerate(colors):
+        s.add(Dot(id=f"d{k}", pos=(k - 2, 0), r=0.2, style={"color": color}))
+
+
+@pytest.mark.parametrize("passes", MODES)
+def test_color_restraint_counts_flat_paint_hues(passes, two_hues):
+    s = _base(passes)
+    _paint_dots(s, "highlight", "secondary", "primary")  # primary is gray
+    s.marker("beat", 1.0)
+    assert "color_restraint" not in _codes(s.engine)  # 2 saturated hues
+    s.add(Dot(id="same", pos=(0, 2), r=0.2, style={"color": "highlight"}))
+    assert "color_restraint" not in _codes(s.engine)  # same hue as another: still 2
+    s.add(Dot(id="third", pos=(0, -2), r=0.2, style={"color": "danger"}))
+    assert "3 saturated paint hues" in _codes(s.engine)["color_restraint"].message
+
+
+@pytest.mark.parametrize("passes", MODES)
+def test_color_restraint_ignores_everything_colored_through_a_colormap(passes, two_hues):
+    s = _base(passes)
+    s.add(cx.DomainColoring(id="plane", function="z"))  # the full wheel: hue is phase
+    s.add(cx.Fractal(id="f", preset="classic"))  # ramps carry hue as a quantity too,
+    s.add(cx.RiemannSurface(id="r", preset="soft_glass"))  # whatever their colormap role
+    _paint_dots(s, "highlight", "secondary")
+    s.marker("beat", 1.0)
+    assert "color_restraint" not in _codes(s.engine)
+    s.add(Dot(id="third", pos=(0, 2), r=0.2, style={"color": "danger"}))
+    assert "color_restraint" in _codes(s.engine)  # flat paint still counts beside them
 
 
 def test_every_theme_keeps_its_restrained_palettes_restrained():
@@ -94,6 +125,10 @@ def test_density_flags_empty_and_crowded_frames(passes):
     big.add(Dot(id="huge", pos=(0, 0), r=6.5, style={"color": "highlight"}))
     big.marker("beat", 1.0)
     assert "crowded" in _codes(big.engine)["density"].message
+    alone = _base(passes)
+    alone.add(Dot(id="huge", pos=(0, 0), r=6.5, style={"color": "highlight"}))
+    alone.marker("beat", 1.0)
+    assert "density" not in _codes(alone.engine)  # one animation may fill the whole frame
     ok = _base(passes)
     ok.add(Dot(id="fair", pos=(0, 0), r=1.2, style={"color": "highlight"}))
     ok.marker("beat", 1.0)
@@ -166,6 +201,7 @@ def test_the_cli_and_mcp_expose_the_aesthetic_pass(tmp_path):
 
     s = _base(None)
     s.add(Dot(id="a", pos=(0, 0), r=0.05))
+    s.add(Dot(id="b", pos=(1, 0), r=0.05))
     s.marker("beat", 1.0)
     path = tmp_path / "a.phasor.json"
     s.engine.save(path)

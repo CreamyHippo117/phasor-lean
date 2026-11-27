@@ -15,10 +15,12 @@ from phasor.core.ids import split_path
 from phasor.core.issues import DocumentError, Issue
 from phasor.core.objects import get_type
 from phasor.core.schema import (
+    Bed,
     CameraSpec,
     ConstraintSpec,
     ConstValue,
     Control,
+    Cue,
     Document,
     ExprSpec,
     Meta,
@@ -139,6 +141,41 @@ class RemoveControl(Model):
     component: int | None = None
 
 
+class AddBed(Model):
+    """Put music or ambience under a stretch of the scene."""
+
+    op: Literal["add_bed"] = "add_bed"
+    bed: Bed
+
+
+class SetBed(Model):
+    """Replace the bed with the same id (to move its ends, fades or gain)."""
+
+    op: Literal["set_bed"] = "set_bed"
+    bed: Bed
+
+
+class AddCue(Model):
+    """Put a one-shot sound (a built-in or a file) on a marker."""
+
+    op: Literal["add_cue"] = "add_cue"
+    cue: Cue
+
+
+class SetCue(Model):
+    """Replace the cue with the same id (to retime, retune or re-level it)."""
+
+    op: Literal["set_cue"] = "set_cue"
+    cue: Cue
+
+
+class RemoveSound(Model):
+    """Take a bed or a cue out. Its id is retired like a removed object's."""
+
+    op: Literal["remove_sound"] = "remove_sound"
+    id: str
+
+
 Op = Annotated[
     AddObject
     | RemoveObject
@@ -155,7 +192,12 @@ Op = Annotated[
     | SetCamera
     | RemoveConstraint
     | AddControl
-    | RemoveControl,
+    | RemoveControl
+    | AddBed
+    | SetBed
+    | AddCue
+    | SetCue
+    | RemoveSound,
     Field(discriminator="op"),
 ]
 
@@ -187,6 +229,10 @@ def parse_patch(patch: Any) -> Patch:
                 for err in e.errors()
             ]
         ) from e
+
+
+def _with_sound(doc: Document, lane: str, items: tuple[Any, ...]) -> Document:
+    return doc.model_copy(update={"sound": doc.sound.model_copy(update={lane: items})})
 
 
 def _fail(code: str, message: str, **kw: Any) -> DocumentError:
@@ -345,6 +391,32 @@ def _apply_op(doc: Document, op: Any) -> Document:
             return doc.model_copy(
                 update={"controls": tuple(c for c in doc.controls if c.key != key)}
             )
+        case AddBed() | AddCue():
+            item = op.bed if isinstance(op, AddBed) else op.cue
+            if item.id in doc.retired_ids:
+                raise _fail("id_retired", f"id {item.id!r} belonged to something removed; "
+                            "ids are never reused", ids=(item.id,),
+                            fix_hint="give it a new id that says what it is")  # fmt: skip
+            lane = "beds" if isinstance(op, AddBed) else "cues"
+            return _with_sound(doc, lane, (*getattr(doc.sound, lane), item))
+        case SetBed() | SetCue():
+            item, lane = (op.bed, "beds") if isinstance(op, SetBed) else (op.cue, "cues")
+            items = getattr(doc.sound, lane)
+            if all(x.id != item.id for x in items):
+                raise _fail("unknown_id", f"no {lane[:-1]} {item.id!r}; {lane} are "
+                            f"{[x.id for x in items]}", ids=(item.id,))  # fmt: skip
+            return _with_sound(doc, lane, tuple(item if x.id == item.id else x for x in items))
+        case RemoveSound():
+            if doc.bed(op.id) is None and doc.cue(op.id) is None:
+                known = [x.id for x in (*doc.sound.beds, *doc.sound.cues)]
+                raise _fail("unknown_id", f"no bed or cue {op.id!r}; there are {known}",
+                            ids=(op.id,))  # fmt: skip
+            sound = doc.sound.model_copy(update={
+                "beds": tuple(x for x in doc.sound.beds if x.id != op.id),
+                "cues": tuple(x for x in doc.sound.cues if x.id != op.id),
+            })  # fmt: skip
+            retired = tuple(sorted({*doc.retired_ids, op.id}))
+            return doc.model_copy(update={"sound": sound, "retired_ids": retired})
         case RemoveConstraint():
             rule = normalize_rule(op.rule)
             if all(c.rule != rule for c in doc.constraints):
@@ -436,8 +508,10 @@ def record_tweaks(overrides: Overrides, patch: Patch) -> Overrides:
 
 
 __all__ = [
+    "AddBed",
     "AddConstraint",
     "AddControl",
+    "AddCue",
     "AddObject",
     "AddSegment",
     "ClearTrack",
@@ -448,6 +522,9 @@ __all__ = [
     "RemoveControl",
     "RemoveMarker",
     "RemoveObject",
+    "RemoveSound",
+    "SetBed",
+    "SetCue",
     "SetMarker",
     "SetMeta",
     "SetNarration",

@@ -1070,7 +1070,8 @@ class Scene:
         return None
 
     def add_sound(self, *a: Any, **k: Any) -> None:
-        self._c.warnings.append("add_sound is not carried over (use narration)")
+        self._c.warnings.append("add_sound is not carried over (add the file as a cue on a "
+                                "marker: s.cue(marker, 'file.wav'))")  # fmt: skip
 
     def construct(self) -> None:  # pragma: no cover
         pass

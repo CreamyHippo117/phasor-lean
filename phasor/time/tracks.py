@@ -2,7 +2,8 @@
 
 A track is a base value plus ordered, non-overlapping segments. Its value at t is a pure
 function: before the first segment it is the base, inside a segment it is eased between the
-value the segment started from and its target, and between segments it holds.
+value the segment started from and its target (in log space for a ``log:`` ease), and
+between segments it holds.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from phasor.core.schema import MarkerRef, TimeRef
-from phasor.core.values import lerp
+from phasor.core.values import geo_lerp, lerp
 
 
 class TimeMap:
@@ -40,6 +41,7 @@ class ResolvedSegment:
     t1: float
     to: Any
     ease: Callable[[float], float]
+    geometric: bool = False  # ``log:`` easing: move by factors (``geo_lerp``)
 
 
 @dataclass(frozen=True)
@@ -59,5 +61,6 @@ class ResolvedTrack:
             if t >= s.t1:
                 v = s.to
                 continue
-            return lerp(v, s.to, s.ease((t - s.t0) / (s.t1 - s.t0)))
+            mix = geo_lerp if s.geometric else lerp
+            return mix(v, s.to, s.ease((t - s.t0) / (s.t1 - s.t0)))
         return v

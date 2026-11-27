@@ -375,6 +375,7 @@ def test_an_example_opens_as_a_copy_with_its_narration_and_the_original_untouche
     narration = original.with_suffix(".narration")  # a speech cache, made where TTS exists
     if narration.exists():
         assert (copies / narration.name).exists()  # the files that go with it
+    assert (copies / "assets" / "drift.ogg").exists()  # and what examples read (sound_bed)
     w.ed.set_param(w.ed.engine.document.objects[0].id, "opacity", "0.5")
     w.ed.save()
     assert original.read_bytes() == before

@@ -15,18 +15,18 @@ from phasor.core.pycode import document_to_python
 ROOT = Path(__file__).parents[1]
 
 
+def _time(t):
+    if not hasattr(t, "offset"):
+        return round(t, 9)
+    return t.model_copy(update={"offset": round(t.offset, 9)})  # a marker and an offset
+
+
 def plain(doc):
     """The document without what a generated script cannot say: the verb that made a segment
     (a raw ``to`` has none) and float noise in times (t1 is recomputed from a duration)."""
     tracks = {
         p: tuple(
-            seg.model_copy(
-                update={
-                    "verb": None,
-                    "t0": round(seg.t0, 9) if isinstance(seg.t0, float) else seg.t0,
-                    "t1": round(seg.t1, 9) if isinstance(seg.t1, float) else seg.t1,
-                }
-            )
+            seg.model_copy(update={"verb": None, "t0": _time(seg.t0), "t1": _time(seg.t1)})
             for seg in segs
         )
         for p, segs in doc.timeline.tracks.items()

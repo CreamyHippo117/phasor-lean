@@ -9,12 +9,18 @@
 - `scene_new`: Start an empty scene (replaces the open one; save first if it matters). It gets the default look, `prism`, unless a `look` ("prism_everywhere", "calm", "glow", "chalk", or "none" for plain) or a `theme` is given; `life` ("off", "subtle", "lively") is the living motion; `palette` the colors run along strokes (`scene_palette`).
 - `scene_open`: Open `name.phasor.json` (or a `.py` script when the server allows scripts; a script that imports `manim` is run through phasor's Manim stand-in and opens as a plain scene, with `notes` on what could not be carried over).
 - `scene_save`: Save the document (`name.phasor.json`); tweaks to a script scene go to its overrides file beside it.
+- `scene_copy`: Make an editable copy of a scene built by a script: the scene as it stands (script and tweaks) saved as a plain document, `<name>_edit.phasor.json` beside the script unless `path` says otherwise, and opened in its place. Every op works on the copy (sound, narration, new objects); the script is never changed. A plain document is copied the same way (a new file to experiment on).
 - `scene_edit`: Apply a patch (one op, a list of ops, or `{"ops": [...]}`). Atomic: if any op is invalid nothing changes. Returns the result and the lint issues it added or fixed. An `add_object` may name a `preset` (see `object_types`); the scene's look fills in what is left unset, and explicit values always win.
 - `scene_palette`: Pick the colors run along strokes: `spectrum` (the prism rainbow), `moonlight` (white with a cool and warm shimmer), `gold`, `glacier`, `borealis`, `rose`, or None for the theme's own. In the prism looks it recolors every glowing curve and the lines the look runs a hue along; fringes, vignette and glow stay. One undo step.
 - `undo`: Revert the last edit (each patch, verb or narration is one step).
 - `redo`: Re-apply the edit that undo reverted.
-- `animate`: Animate with a choreography verb starting at a marker (or seconds). Timing comes from the theme. Returns when it starts and ends so the next step can follow it. `orbit` swings the 3D camera `value` degrees (default 360), until marker `until` if given; `morph` too runs until `until` if given. `transform` and `become` take `targets=[from, to]`; `sweep` takes `path` and `value`; `circumscribe` takes one target and `value` "circle" or "box".
+- `animate`: Animate with a choreography verb starting at a marker (or seconds). Timing comes from the theme. Returns when it starts and ends so the next step can follow it. `orbit` swings the 3D camera `value` degrees (default 360), until marker `until` if given; `morph` too runs until `until` if given. `transform` and `become` take `targets=[from, to]`; `sweep` takes `path` and `value`; `circumscribe` takes one target and `value` "circle" or "box"; `unfold` takes `targets=[room, ray]` and `value` flips (default 5).
 - `narrate`: Set the narration. `[[name]]` puts a marker at the next word. Every animation anchored to a marker follows the voice. `pace` adds breathing room after busy sentences.
+- `voice_add`: Put a recording of the person's voice (an audio file in the scene's folder) into the narration, starting at `at` (seconds, or a marker's name). It plays as the voice: music ducks under it. `text` is what it says (for the script and the timeline; the file's name when empty). It may not overlap another sentence; move it later with `set_narration`.
+- `cue`: Put a one-shot sound on a marker (`at`) plus `offset` seconds: a built-in (`tick`, `chime`, `whoosh`, `pop`, `swell`, `tone`) or an audio file in the scene's folder. `gain`: loudness in LU relative to the voice (default the theme's, 10 under); `pan` -1..1; `midi` tunes chime/pop/swell/tone, `dur` sets tone/swell/whoosh's length, `voice` tone's timbre (sine, soft, pluck, bell). Returns its id and time; retime it with scene_edit `set_cue`, take it out with `remove_sound`.
+- `bed`: Put music or ambience (an audio file in the scene's folder: WAV, FLAC, OGG, MP3) under the scene from marker `start` to marker `end` (omit either for the scene's start or end), looped, with equal-power fades of `fade` seconds. `gain`: its loudness in LU relative to the voice (default the theme's, 18 under); it dips while the narration speaks. Returns its id; change it with scene_edit `set_bed`.
+- `sound_report`: What the soundtrack sounds like, in numbers (you cannot hear it): loudness in LUFS of the whole mix and of each lane (voice, every bed, every cue) in each spoken narration block, how far each bed sits under the voice there and how deep it ducks, the final trim and true peak, and the sound lint issues.
+- `sound_master`: Master the sound: fix what the sound check finds (a bed covering the voice is turned down, a mix that would clip is turned down evenly, a cue peaking on a stressed word moves just before it), check again, at most `rounds` times. Each round is one undo step. Returns before and after, what changed, and what is left.
 - `checkpoint`: Remember the current document under `name` (to compare or return to later).
 - `restore`: Go back to a checkpoint, as one step (undo brings you back again).
 - `diff`: What changed from version `a` to version `b` ('current', 'saved' or a checkpoint).
@@ -37,13 +43,14 @@
 
 ## Object types (use these names in add_object)
 
+- `aliasing`: flash, frequencies, amplitudes, phases, signal, fs, start, duration, reconstruct, reveal, spectrum, wheel, wheel_samples, fmax, pos, extent
 - `arrow`: flash, start, end
 - `axes`: flash, dims, x_range, y_range, z_range, pos, scale, tick, labels
 - `callout`: flash, target, shape, pad, progress
 - `cayley_graph`: flash, group, generators, pos, r, draw
 - `cayley_table`: flash, group, pos, cell, reveal, subgroup, cosets
 - `clock_diagram`: flash, n, step, pos, r, cosets
-- `complex_map`: flash, function, pos, center, extent, lines, samples, amount, limit
+- `complex_map`: flash, function, path, pos, center, extent, lines, samples, amount, limit
 - `convolution`: flash, f, g, f_support, g_support, pos, extent, progress, ghost, shade, hue_cycles
 - `counter`: flash, value, digits, prefix, suffix, math, pos, anchor
 - `directivity`: flash, kind, elements, spacing, radius, frequency, steer, pos, size
@@ -53,6 +60,7 @@
 - `eigen_lines`: flash, matrix, pos, length
 - `epicycles`: flash, points, terms, phase, trace
 - `equation`: flash, parts, colors, pos, write, drift, keys, from_parts, from_colors, from_keys, from_pos, from_id, morph, arc
+- `face`: flash, points, fill
 - `filtered_signal`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, frequencies, amplitudes, duration, progress
 - `filtered_spectrum`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, frequencies, amplitudes, window, samples, fade, envelope
 - `fixed_points`: flash, f, g, constants, pos, extent, rays, labels, ray_length, reveal, grid
@@ -62,9 +70,10 @@
 - `frequency_response`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, extent, plot, scale, floor_db, reveal
 - `galois_diagram`: flash, primes, pos, width, height, gap
 - `graph`: flash, function, xmin, xmax, pos
+- `hinged_copy`: flash, source, hinges, turn
 - `homomorphism`: flash, n, m, a, pos, r, gap, progress
 - `image`: flash, path, pos, width, height, frame
-- `image_sources`: flash, size, source, order, material, absorption, r
+- `image_sources`: flash, size, source, order, material, absorption, r, max_points
 - `impulse_response`: flash, size, source, listener, order, material, absorption, pos, extent, duration, reveal, show_rt60
 - `interference`: flash, frequency, speed, time, mode, blend, amplitudes, onsets, pos, size, gain, markers, hue_cycles, hue, isolines, fade, ambient, contrast, sources, phases
 - `limit`: flash, function, a, epsilon, xmin, xmax, pos, bands
@@ -85,9 +94,11 @@
 - `permutation`: flash, perm, pos, spacing, progress
 - `phase_portrait`: flash, f, g, constants, pos, extent, seeds, n_seeds, t_end, steps, progress, backward, flow, flow_spacing, nullclines, hue_cycles, seed
 - `phased_array`: flash, frequency, speed, time, mode, blend, amplitudes, onsets, pos, size, gain, markers, hue_cycles, hue, isolines, fade, ambient, contrast, center, count, spacing, layout, axis, steer, ray
+- `phasor_field`: flash, poles, residues, tick, pos, layout, order, spacing, scale, decay, hue, frame_ticks, shutter, rings
 - `point_cloud`: flash, source, degree, coefficients, kind, constants, max_iter, points, values, count, seed, pos, size, scale, point_size, exposure, hue, color_by, twist, twinkle, white, map, r_range, x_range, r_focus, x_focus, focus, x0, n_iter, n_keep, sweep
 - `pole_zero`: flash, kind, order, cutoff, cutoff2, fs, radius, zeros, poles, gain, pos, size, scale, probe
 - `polygon`: flash, n, pos, r, rotation, flip, fill
+- `polyhedron`: flash, size, origin, vertices, faces, names, root, tree, unfold, geodesic, trace, fill
 - `pressure_slice`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, size, origin, source, z, time, dx, material, absorption, frequency, gain, seed
 - `riemann_sum`: flash, function, a, b, n, rule, pos
 - `riemann_surface`: flash, kind, pos, radius, height, scale, rings, segments
@@ -97,8 +108,11 @@
 - `source`: flash, pos, r
 - `spectrogram`: flash, smooth, isolines, hue_cycles, hue, fade, ambient, contrast, f0, f1, signal, wav, duration, fs, nwin, hop, window, fmax, playhead, pos, size
 - `spectrum`: flash, frequencies, amplitudes, window, samples, fs, pos, extent, bins
+- `star_lattice`: flash, loops, delays, directions, fan, spacing, by_delay, origin, max_time, max_order, max_points, arms, time, rise, decay, afterglow, swell, white, flash_style, lap_gain, color_by, arm_values, hue, hue_span, point_size, arm_opacity, crowd
 - `strange_attractor`: flash, system, sigma, rho, beta, seed, t_end, progress, pos, size
 - `subgroup_lattice`: flash, group, pos, width, height
+- `sweep_front`: flash, lattice, rim, veil, rings, sectors
+- `sweep_lattice`: flash, rule, size, source, order, basis, counts, origin, points, values, center, normal, flat, time, speed, extent, attack, decay, before, after, swell, white, fade, r, min_size, color_by, hue_step, hue, max_points
 - `taylor`: flash, function, center, order, xmin, xmax, ymax, pos
 - `text`: flash, text, pos, anchor, leader, leader_on, write
 - `tracer`: flash, path, progress, trail, r

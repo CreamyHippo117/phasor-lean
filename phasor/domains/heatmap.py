@@ -19,19 +19,40 @@ each optional:
 
 Every type that draws a heat map has these parameters (``HeatParams``); their defaults draw
 what the plain pictures always drew.
+
+The pixels are made by the ``heat_shade`` kernel (``render/gpu/kernels/heat.py``, which also
+holds the maths as its NumPy reference): a type says how its values become level, colour
+and glow weight with a ``Recipe``, and the whole picture is one pass on the card, or on
+every CPU core. ``heat_pixels`` still takes plain functions (a scene's own type that needs
+something a recipe cannot say); that path is NumPy on one core.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from pydantic import Field
 
 from phasor.core.objects import ParamsBase
+from phasor.render.gpu.kernels.heat import (
+    AMBIENT,
+    Recipe,
+    edge_window,
+    isoline_weight,
+    lut_colour,
+    neighbourhood,
+    sample,
+    shade_values,
+)
+
+__all__ = [
+    "AMBIENT", "PRISM", "HeatParams", "Recipe", "edge_window", "field_pixels", "heat_pixels",
+    "isoline_weight", "lut_colour", "sample", "shade_values", "wheel_colour", "wheel_recipe",
+]  # fmt: skip
 
 Pixels = Callable[[int, int, tuple[float, float], float], np.ndarray]
-AMBIENT = 0.12  # with a glow weight: the share of colour a quiet (weight 0) pixel keeps
 
 
 class HeatParams(ParamsBase):
@@ -71,66 +92,10 @@ PRISM: dict = {
 }
 
 
-def _catmull_rom(t: np.ndarray) -> list[np.ndarray]:
-    t2, t3 = t * t, t * t * t
-    return [
-        0.5 * (-t3 + 2 * t2 - t),
-        0.5 * (3 * t3 - 5 * t2 + 2),
-        0.5 * (-3 * t3 + 4 * t2 + t),
-        0.5 * (t3 - t2),
-    ]
-
-
-def sample(grid: np.ndarray, g: np.ndarray, h: np.ndarray, how: str) -> np.ndarray:
-    """``grid[x, y]`` at fractional grid coordinates ``g`` (x, length pw) and ``h`` (y,
-    length ph), clamped to the grid: ``(ph, pw)``. ``how``: ``nearest`` (the cell's value),
-    ``linear`` (bilinear) or ``smooth`` (Catmull-Rom bicubic)."""
-    nx, ny = grid.shape
-    g, h = np.clip(g, 0, nx - 1), np.clip(h, 0, ny - 1)
-    if how == "nearest":  # the cell the point is in (a cell spans its centre +- 1/2)
-        ix = np.minimum(np.floor(g + 0.5).astype(int), nx - 1)
-        iy = np.minimum(np.floor(h + 0.5).astype(int), ny - 1)
-        return grid[ix][:, iy].T
-    x0, y0 = np.floor(g).astype(int), np.floor(h).astype(int)
-    fx, fy = g - x0, h - y0
-    if how == "linear":
-        x1, y1 = np.minimum(x0 + 1, nx - 1), np.minimum(y0 + 1, ny - 1)
-        fx, fy = fx[None, :], fy[:, None]
-        return (grid[x0][:, y0].T * (1 - fx) * (1 - fy) + grid[x1][:, y0].T * fx * (1 - fy)
-                + grid[x0][:, y1].T * (1 - fx) * fy + grid[x1][:, y1].T * fx * fy)  # fmt: skip
-    if how != "smooth":
-        raise ValueError(f"how must be nearest, linear or smooth, got {how!r}")
-    wx, wy = _catmull_rom(fx), _catmull_rom(fy)
-    out = np.zeros((len(h), len(g)))
-    for k in range(4):
-        ix = np.clip(x0 + k - 1, 0, nx - 1)
-        col = grid[ix]  # (pw, ny)
-        for m in range(4):
-            iy = np.clip(y0 + m - 1, 0, ny - 1)
-            out += wy[m][:, None] * wx[k][None, :] * col[:, iy].T
-    return out
-
-
-def isoline_weight(level: np.ndarray, count: int) -> np.ndarray:
-    """1 on the ``count`` contour levels of ``level`` (values 0..1), falling to 0 about a
-    pixel away from them, whatever the zoom: the distance to the nearest level, in level
-    units, over how much ``level`` changes per pixel."""
-    if count <= 0:
-        return np.zeros_like(level)
-    s = level * count
-    frac = np.abs(s - np.round(s))
-    gy, gx = np.gradient(s)
-    per_px = np.hypot(gx, gy)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        d = np.where(per_px > 1e-9, frac / per_px, np.inf)
-    inside = (s > 0.5) & (s < count - 0.5)  # not the floor or ceiling of the range
-    return np.where(inside, np.exp(-d * d / 0.8), 0.0)
-
-
 def heat_pixels(
     grid: np.ndarray,
     size: tuple[float, float],
-    colour: Callable[[np.ndarray], np.ndarray],
+    colour: Callable[[np.ndarray], np.ndarray] | Recipe,
     *,
     cells: bool = False,
     how: str = "linear",
@@ -147,7 +112,9 @@ def heat_pixels(
     """``ctx.field`` pixels for ``grid[x, y]`` spanning a ``size`` rectangle.
 
     ``cells``: grid values sit at cell centres (``x / w * nx - 0.5``), else at nodes from edge
-    to edge (``x / w * (nx - 1)``). ``colour(value) -> (ph, pw, 3)`` linear RGB, or
+    to edge (``x / w * (nx - 1)``). ``colour``: a ``Recipe`` (level, colour and weight all
+    come from it, and the ``heat_shade`` kernel draws the picture), or a function
+    ``colour(value) -> (ph, pw, 3)`` linear RGB, or
     ``colour_at(value, u, v)`` where ``u`` (pw,) and ``v`` (ph,) are the pixels' places across
     and up the rectangle (0..1). ``level`` maps a value to 0..1 for the isolines (default: the
     value). ``weight(value)`` is the glow weight 0..1 (default: none, alpha 1 as before): with
@@ -156,6 +123,12 @@ def heat_pixels(
     isolines add to the weight and brighten.
     ``fade``: colour and weight fall to the background over that share of the shorter side at
     the rectangle's edges."""
+    if isinstance(colour, Recipe):
+        if level is not None or weight is not None or colour_at is not None:
+            raise ValueError("a Recipe says the level, the weight and the colour itself")
+        return _kernel_pixels(colour, size, grid=grid, cells=cells, how=how, isolines=isolines,
+                              line_glow=line_glow, background=background, ambient=ambient,
+                              fade=fade, contrast=contrast)  # fmt: skip
     nx, ny = grid.shape
     sx, sy = size
 
@@ -179,62 +152,45 @@ def heat_pixels(
     return pixels
 
 
-def shade_values(
-    val: np.ndarray,
-    rgb: np.ndarray,
-    u: np.ndarray,
-    v: np.ndarray,
+def field_pixels(
+    image_of: Callable[[Any], Any],
     size: tuple[float, float],
+    recipe: Recipe,
     *,
-    level: Callable[[np.ndarray], np.ndarray] | None = None,
     isolines: int = 0,
-    weight: Callable[[np.ndarray], np.ndarray] | None = None,
     line_glow: float = 0.7,
     background: np.ndarray | None = None,
     ambient: float = AMBIENT,
     fade: float = 0.0,
     contrast: float = 1.0,
-) -> np.ndarray:
-    """The ``ctx.field`` pixels (ph, pw, 4) of values ``val`` (ph, pw) already coloured
-    ``rgb`` (ph, pw, 3), at places ``u`` (pw,) across and ``v`` (ph,) up a ``size``
-    rectangle (0..1): isolines, glow weight and edge fade as in ``heat_pixels``, which samples
-    a grid and calls this; a field computed per pixel (``waves``) calls it directly."""
-    ph, pw = val.shape
-    out = np.ones((ph, pw, 4), dtype=np.float32)
-    lines = isoline_weight(np.clip((level or (lambda x: x))(val), 0, 1), isolines)
-    if weight is None and not isolines and not fade:
-        out[..., :3] = rgb
+) -> Pixels:
+    """``ctx.field`` pixels of a field another kernel computes per pixel (``waves``), shaded
+    as ``heat_pixels`` shades a grid. ``image_of(tile, center, height)`` returns that field
+    for a ``Tile`` of the view, as the kernel left it (on the card with CUDA): it is coloured
+    there and only the finished pixels come back."""
+    return _kernel_pixels(recipe, size, image_of=image_of, isolines=isolines,
+                          line_glow=line_glow, background=background, ambient=ambient,
+                          fade=fade, contrast=contrast)  # fmt: skip
+
+
+def _kernel_pixels(recipe: Recipe, size, *, grid=None, image_of=None, **look) -> Pixels:
+    def pixels(pw: int, ph: int, center: tuple[float, float], height: float) -> np.ndarray:
+        from phasor.render import gpu
+        from phasor.render.gpu.bridge import to_host
+
+        out = np.empty((ph, pw, 4), dtype=np.float32)
+        for tile in gpu.plan_tiles(pw, ph, 64):
+            source: dict[str, Any] = {"grid": grid}
+            if image_of is not None:  # the tile and its neighbours (the isolines read them)
+                x0, y0, x1, y1 = neighbourhood(tile)
+                around = gpu.Tile(x0, y0, x1 - x0, y1 - y0, pw, ph)
+                source = {"image": image_of(around, center, height), "origin": (x0, y0)}
+            part = gpu.run("heat_shade", tile, center=center, height=height, size=size,
+                           recipe=recipe, **source, **look)  # fmt: skip
+            out[tile.y0 : tile.y0 + tile.h, tile.x0 : tile.x0 + tile.w] = to_host(part)
         return out
-    w = np.zeros_like(val) if weight is None else np.clip(weight(val), 0, 1)
-    if contrast != 1:
-        w = w**contrast
-    lit = w + line_glow * lines * (1 - w)
-    # With a weight, quiet parts fall toward black and strong parts keep their colour
-    # (the prism look: light out of darkness); the contour lines are light on top.
-    bg = np.zeros(3) if background is None else np.asarray(background[:3], dtype=np.float64)
-    shade = 1.0 if weight is None else ambient + (1 - ambient) * w
-    col = bg + (rgb - bg) * np.asarray(shade)[..., None] + rgb * (line_glow * lines)[..., None]
-    if fade > 0:
-        win = edge_window(u, v, size, fade)
-        col = bg + (col - bg) * win[..., None]
-        lit = lit * win
-    out[..., :3] = col
-    out[..., 3] = lit
-    return out
 
-
-def edge_window(u: np.ndarray, v: np.ndarray, size: tuple[float, float], fade: float):
-    """(len(v), len(u)): 1 inside the rectangle, falling smoothly to 0 at its edges over
-    ``fade`` of its shorter side. ``u``, ``v``: places across and up it (0..1)."""
-    short = max(min(size), 1e-12)
-
-    def ramp_(d: np.ndarray) -> np.ndarray:
-        x = np.clip(d / (fade * short), 0, 1)
-        return x * x * (3 - 2 * x)
-
-    across = ramp_(np.minimum(u, 1 - u) * size[0])
-    up = ramp_(np.minimum(v, 1 - v) * size[1])
-    return up[:, None] * across[None, :]
+    return pixels
 
 
 def wheel_colour(colormap, p: HeatParams) -> Callable[[np.ndarray], np.ndarray]:
@@ -244,24 +200,7 @@ def wheel_colour(colormap, p: HeatParams) -> Callable[[np.ndarray], np.ndarray]:
     return lambda x: wheel(p.hue_cycles * x + p.hue)
 
 
-def lut_colour(lut: np.ndarray, how: str = "nearest") -> Callable[[np.ndarray], np.ndarray]:
-    """A colour function from a (n, 3) colormap table for values in 0..1: the table entry
-    (``nearest``, as the plain pictures always did), blended between entries (``linear``, no
-    visible steps), or the table as a wheel (``wrap``: any value, its fraction read round the
-    table and blended, last entry into the first, as hue runs along a prism stroke)."""
-    lut = np.asarray(lut)
-
-    def colour(v: np.ndarray) -> np.ndarray:
-        if how == "wrap":
-            x = np.mod(v, 1.0) * len(lut)
-            k = np.floor(x).astype(int) % len(lut)
-            t = (x - np.floor(x))[..., None]
-            return lut[k] * (1 - t) + lut[(k + 1) % len(lut)] * t
-        x = np.clip(v, 0, 1) * (len(lut) - 1)
-        if how == "nearest":
-            return lut[np.clip(x.astype(int), 0, len(lut) - 1)]
-        k = np.minimum(np.floor(x).astype(int), len(lut) - 2)
-        t = (x - k)[..., None]
-        return lut[k] * (1 - t) + lut[k + 1] * t
-
-    return colour
+def wheel_recipe(colormap, p: HeatParams, **how) -> Recipe:
+    """The prism colouring of ``p`` as a ``Recipe`` (``wheel_colour`` for the kernel);
+    ``how``: the rest of the recipe (transform, level, weight, ``hue_of``)."""
+    return Recipe(colour="wheel", lut=colormap, hue_cycles=p.hue_cycles, hue=p.hue, **how)

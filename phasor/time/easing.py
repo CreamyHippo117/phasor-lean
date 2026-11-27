@@ -1,8 +1,11 @@
 """Easing curves: functions from progress u in [0, 1] to eased progress, with f(0)=0, f(1)=1.
 
 ``back`` and ``spring`` overshoot (go past 1 and return), so use them on positions and sizes,
-not on values with hard limits such as opacity. Easings are named, never Python functions in
-a document: a document must mean the same thing on every machine (contract 3).
+not on values with hard limits such as opacity. ``log:<name>`` runs any curve in log space
+(``value = a (b / a)^curve(u)``, see ``core.values.geo_lerp``): equal times give equal
+factors, so a 600x camera dive moves evenly; both ends must be positive. Easings are named,
+never Python functions in a document: a document must mean the same thing on every machine
+(contract 3).
 """
 
 from __future__ import annotations
@@ -34,3 +37,12 @@ EASINGS: dict[str, Callable[[float], float]] = {
     "back": _back,
     "spring": _spring,
 }
+
+LOG = "log:"  # prefix: the same curve, moving through the values by factors
+
+
+def ease_named(name: str) -> tuple[Callable[[float], float], bool] | None:
+    """``(curve, geometric)`` for an ease name (``"smooth"``, ``"log:smooth"``), or None."""
+    geometric = name.startswith(LOG)
+    curve = EASINGS.get(name.removeprefix(LOG))
+    return None if curve is None else (curve, geometric)

@@ -14,6 +14,13 @@ Every object takes the same filter parameters (``kind``, ``order``, ``cutoff``, 
 ``fs``; ``custom`` takes ``zeros``, ``poles``, ``gain``), so they describe one filter. Numerics
 are in ``filters_math``; the tones of ``FilteredSignal`` and ``FilteredSpectrum`` are sinusoids
 (no randomness), and the spectrum is the existing ``fourier_math.spectrum`` (window and all).
+
+``PhasorField`` is the other view of a filter: its modes, one turning hand ``r_k lambda_k^n`` per
+pole, with the exact motion blur of the fast ones (it takes ``poles`` and ``residues`` of its
+own, any number, not the design parameters):
+
+    s.add(filt.PhasorField(id="modes", poles=filt.polar(rho, theta), tick=expr("30 * t"),
+                           frame_ticks=30 / 60))
 """
 
 from __future__ import annotations
@@ -31,7 +38,16 @@ from phasor.domains import filters_math as fm
 from phasor.domains import fourier_math as fo
 from phasor.domains.cx import DomainColoring
 from phasor.domains.fourier import _ydir
-from phasor.domains.strokes import disc_batch, polyline, segment_batch, with_alpha
+from phasor.domains.strokes import (
+    disc_batch,
+    lut_colors,
+    polyline,
+    polylines,
+    segment_batch,
+    with_alpha,
+)
+
+polar = fm.polar  # poles as (re, im) pairs from radii and angles, for PhasorField
 
 _CACHE: dict = {}
 _LIMIT = 64
@@ -562,3 +578,183 @@ class FilteredSpectrum(ObjectBase):
         label = with_alpha(me.style["text"], p.opacity)
         ctx.text("spectrum", at(0.0, 1.1), me.style["size"] * unit, color=label, anchor="left",
                  glow=1.0)  # fmt: skip
+
+
+# ---------------------------------------------------------------- PhasorField
+
+_BLUR_MIN = 0.5  # a hand is smeared once its tip sweeps this many stroke widths in a shutter
+_LIST_MAX = 32  # semantics list at most this many hand indices
+
+
+class _PhasorParams(ParamsBase):
+    poles: tuple[tuple[float, float], ...] = Field(min_length=1, max_length=4096)  # (re, im)
+    residues: tuple[tuple[float, float], ...] = ()  # (re, im), one per pole; none: all 1
+    tick: float = 0.0  # n: the hands are r_k lambda_k^n; fractional ticks turn smoothly
+    pos: Vec3 = (0.0, 0.0, 0.0)  # the centre of the seats
+    layout: Literal["spiral", "grid", "line"] = "spiral"
+    order: Literal["angle", "index"] = "angle"  # angle: the slowest hand in the first seat
+    spacing: float = Field(1.0, gt=0)  # world units between neighbouring seats
+    scale: float = Field(0.0, ge=0)  # world units per unit of |r|; 0: longest hand 0.45 spacing
+    decay: Literal["length", "glow", "none"] = "length"  # how rho^n shows
+    hue: float = 0.0  # turns the colour wheel (a share of one turn)
+    frame_ticks: float = Field(0.0, ge=0)  # ticks per frame (rate / fps); 0: no smear
+    shutter: float = Field(0.5, ge=0, le=1)  # share of a frame the shutter is open
+    rings: float = Field(0.2, ge=0, le=1)  # opacity of each hand's |r| circle; 0: none
+
+    @model_validator(mode="after")
+    def _matching(self):
+        if self.residues and len(self.residues) != len(self.poles):
+            raise ValueError("residues needs one (re, im) per pole, or none (all 1)")
+        return self
+
+
+@register
+class PhasorField(ObjectBase):
+    """The modes of a filter as hands: pole ``lambda_k = rho_k e^{i theta_k}`` with residue
+    ``r_k`` is a hand ``r_k lambda_k^n`` that turns ``theta_k`` and shrinks by ``rho_k`` each
+    tick ``n``. The hands sit on a sunflower spiral (slowest in the middle), a grid or a line;
+    each takes the hue of the angle it points at (the phase wheel). With ``frame_ticks`` set,
+    a hand that turns far in one frame is drawn as the exact smear a camera with the shutter
+    open ``shutter`` of a frame would record: the same light spread over the swept sector, so a
+    fast hand is a faint fan or disc instead of a strobing stick, and a slow one is unchanged."""
+
+    type: ClassVar[str] = "phasor_field"
+    Life: ClassVar = frozenset({"glow"})  # angle and length are the maths: they never drift
+    Style: ClassVar = {
+        "colormap": ("colormap", "phase"),
+        "seat": ("emphasis", "muted"),
+        "stroke": ("stroke", "regular"),
+        "glow": ("glow", "none"),
+    }
+    Params: ClassVar = _PhasorParams
+
+    @staticmethod
+    def _poles(p) -> np.ndarray:
+        return fm._as_complex(p.poles)
+
+    def _seats(self, p) -> np.ndarray:
+        lam = self._poles(p)
+        order = np.argsort(np.abs(np.angle(lam)), kind="stable") if p.order == "angle" else None
+        key = ("seats", len(lam), p.layout, p.spacing, None if order is None else tuple(order))
+        xy = _memo(key, lambda: fm.seat_offsets(len(lam), p.layout, p.spacing, order))
+        return np.c_[xy, np.zeros(len(lam))] + np.asarray(p.pos, dtype=np.float64)
+
+    @staticmethod
+    def _unit(p) -> float:
+        """World units per unit of |r|."""
+        if p.scale > 0:
+            return p.scale
+        r = np.abs(fm._as_complex(p.residues)) if p.residues else np.ones(1)
+        return 0.45 * p.spacing / max(float(r.max()), 1e-300)
+
+    def _hands(self, p, n: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(angle, length in world units, light) of every hand at tick ``n``."""
+        z = fm.mode_hands(p.poles, p.residues, n)
+        r = np.abs(fm.mode_hands(p.poles, p.residues, 0.0)) * self._unit(p)
+        rho = np.abs(self._poles(p))
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            g = np.nan_to_num(np.clip(np.where(rho > 0, rho ** float(n), 0.0), 0.0, 8.0))
+        if p.decay == "length":
+            return np.angle(z), r * g, np.ones(len(z))
+        light = np.clip(g, 0.0, 1.0) if p.decay == "glow" else np.ones(len(z))
+        return np.angle(z), r, light
+
+    @staticmethod
+    def _sweep_ticks(p) -> float:
+        return p.frame_ticks * p.shutter
+
+    @staticmethod
+    def _width(me, state: SceneState) -> float:
+        cam = state.camera_for(me)
+        return me.style["stroke"] * float(cam.units_per_height(np.asarray(me.params.pos)))
+
+    def _blurred(self, me, state: SceneState) -> np.ndarray:
+        """Which hands are drawn smeared: those whose tip sweeps over half a stroke width."""
+        p = me.params
+        s = self._sweep_ticks(p)
+        _, length, _ = self._hands(p, p.tick)
+        sweep = np.abs(np.angle(self._poles(p))) * s
+        return (s > 0) & (length * sweep > _BLUR_MIN * self._width(me, state))
+
+    def world_bounds(self, state: SceneState) -> Bounds:
+        p = self.me(state).params
+        seats = self._seats(p)
+        _, length, _ = self._hands(p, p.tick)
+        ring = np.abs(fm.mode_hands(p.poles, p.residues, 0.0)) * self._unit(p)
+        reach = max(float(length.max()), float(ring.max()) if p.rings > 0 else 0.0)
+        pad = np.array([reach, reach, 0.0])
+        return Bounds(tuple(seats.min(axis=0) - pad), tuple(seats.max(axis=0) + pad))
+
+    def features(self, state: SceneState) -> dict[str, np.ndarray]:
+        p = self.me(state).params
+        seats = self._seats(p)
+        angle, length, _ = self._hands(p, p.tick)
+        tips = seats + np.c_[length * np.cos(angle), length * np.sin(angle), np.zeros(len(angle))]
+        return {"center": np.asarray(p.pos, dtype=np.float64), "seats": seats, "tips": tips}
+
+    def semantics(self, state: SceneState) -> dict[str, Any]:
+        me = self.me(state)
+        p = me.params
+        lam = self._poles(p)
+        speed = np.abs(np.angle(lam))  # radians per tick
+        per_frame = np.degrees(speed * p.frame_ticks)
+        blurred = np.flatnonzero(self._blurred(me, state))
+        aliased = np.flatnonzero(per_frame > 180.0)  # the wagon wheel: it seems to turn back
+        total = complex(fm.mode_hands(p.poles, p.residues, p.tick).sum())
+        fastest = int(np.argmax(speed))
+        return {
+            "kind": "phasor_field", "count": len(lam), "tick": round(p.tick, 6),
+            "layout": p.layout, "decay": p.decay, "stable": bool(np.all(np.abs(lam) < 1)),
+            "fastest": fastest, "fastest_deg_per_tick": round(float(np.degrees(speed[fastest])), 4),
+            "max_turn_per_frame_deg": round(float(per_frame.max()), 4),
+            "blurred_count": len(blurred), "blurred": blurred[:_LIST_MAX].tolist(),
+            "aliased_count": len(aliased), "aliased": aliased[:_LIST_MAX].tolist(),
+            "sum": [round(total.real, 9), round(total.imag, 9)],
+        }  # fmt: skip
+
+    def draw(self, ctx: DrawContext, state: SceneState, pass_: Pass) -> None:
+        me = self.me(state)
+        p = me.params
+        cam = state.camera_for(me)
+        glow = me.style["glow"]
+        lut = np.asarray(me.style["colormap"], dtype=np.float64)
+        w = self._width(me, state)
+        px = float(cam.units_per_height(np.asarray(p.pos))) / max(state.height, 1)
+        seats = self._seats(p)
+        if p.rings > 0:  # each hand's starting length |r_k|: how far it has decayed
+            a = np.linspace(0, 2 * math.pi, 49)
+            reach = np.abs(fm.mode_hands(p.poles, p.residues, 0.0)) * self._unit(p)
+            ring = np.c_[np.cos(a), np.sin(a), np.zeros(len(a))]
+            polylines(ctx, cam, seats[:, None, :] + reach[:, None, None] * ring[None], w * 0.5,
+                      color=with_alpha(me.style["seat"], p.opacity * p.rings))  # fmt: skip
+        disc_batch(ctx, cam, seats, w * 0.9, colors=with_alpha(me.style["seat"], p.opacity))
+        angle, length, light = self._hands(p, p.tick)
+        blur = self._blurred(me, state)
+        sharp = np.flatnonzero(~blur & (length > 0))
+        if len(sharp):
+            d = np.c_[np.cos(angle[sharp]), np.sin(angle[sharp]), np.zeros(len(sharp))]
+            ends = np.stack([seats[sharp], seats[sharp] + length[sharp, None] * d], axis=1)
+            cols = lut_colors(lut, fm.phase_hue(angle[sharp], p.hue))
+            cols[:, 3] = light[sharp]
+            polylines(ctx, cam, ends, w, color=(1.0, 1.0, 1.0, p.opacity), glow=glow,
+                      colors=np.repeat(cols[:, None], 2, axis=1))  # fmt: skip
+        s = self._sweep_ticks(p)
+        theta = np.angle(self._poles(p))
+        opened, closed = self._hands(p, p.tick - s / 2), self._hands(p, p.tick + s / 2)
+        pos, col, tris, base = [], [], [], 0
+        for k in np.flatnonzero(blur):
+            sweep = float(theta[k] * s)
+            tip = max(opened[1][k], closed[1][k]) / px  # its length in pixels
+            columns = int(np.clip(math.ceil(abs(sweep) * tip / 4), 2, 256))
+            xy, lit, ang = fm.swept_hand(float(opened[0][k]), sweep, float(opened[1][k]),
+                                         float(closed[1][k]), w, columns, 20 if tip > 40 else 10,
+                                         float(opened[2][k]), float(closed[2][k]))  # fmt: skip
+            pos.append(np.c_[xy.reshape(-1, 2), np.zeros(lit.size)] + seats[k])
+            c = lut_colors(lut, fm.phase_hue(ang.ravel(), p.hue))
+            c[:, 3] = np.clip(lit.ravel(), 0.0, 1.0)
+            col.append(c)
+            tris.append(fm.grid_triangles(*lit.shape) + base)
+            base += lit.size
+        if pos:
+            ctx.triangles(np.vstack(pos), np.vstack(tris), color=(1.0, 1.0, 1.0, p.opacity),
+                          glow=glow, colors=np.vstack(col))  # fmt: skip

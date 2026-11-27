@@ -30,10 +30,11 @@ from phasor.core.spatial import (
     perspective_camera,
 )
 from phasor.core.state import ObjectState, SceneState
-from phasor.core.values import normalize, same_shape
+from phasor.core.values import normalize, positive, same_shape
 from phasor.style.theme import PALETTES, Theme, ThemeError, load_theme
-from phasor.time.easing import EASINGS
+from phasor.time.easing import EASINGS, LOG, ease_named
 from phasor.time.expr import CompiledExpr, ExprError, compile_expr
+from phasor.time.sound import PlacedBed, PlacedCue, builtin_seconds
 from phasor.time.tracks import ResolvedSegment, ResolvedTrack, TimeMap
 from phasor.time.updaters import MEMO, Updater, UpdaterOut
 
@@ -74,6 +75,9 @@ class Compiled:
     base_dir: str = ""
     # (object id, why) for each object whose code is not available (lint missing_type).
     missing: tuple[tuple[str, str], ...] = ()
+    # The document's beds and cues with their times in seconds (time/sound.py).
+    beds: tuple[PlacedBed, ...] = ()
+    cues: tuple[PlacedCue, ...] = ()
 
 
 @functools.cache
@@ -239,9 +243,11 @@ def compile_document(
             except KeyError as e:
                 add(Issue("unknown_marker", f"{where}: no marker {e.args[0]!r}", path=path))
                 continue
-            if seg.ease not in EASINGS:
-                add(Issue("unknown_ease", f"{where}: no easing {seg.ease!r}; "
-                          f"available: {sorted(EASINGS)}", path=path))  # fmt: skip
+            ease = ease_named(seg.ease)
+            if ease is None:
+                add(Issue("unknown_ease", f"{where}: no easing {seg.ease!r}; available: "
+                          f"{sorted(EASINGS)}, each also as 'log:<name>' (by factors)",
+                          path=path))  # fmt: skip
                 continue
             if t1 < t0 or t0 < prev_end:
                 add(Issue("bad_segment", f"{where}: spans {t0:g}-{t1:g} s but must not run "
@@ -258,10 +264,48 @@ def compile_document(
                 add(Issue("bad_param", f"{where}: target {to!r} does not match the shape of "
                           f"{node.value!r}", ids=(target,), path=path))  # fmt: skip
                 continue
-            resolved.append(ResolvedSegment(t0, t1, to, EASINGS[seg.ease]))
+            start = resolved[-1].to if resolved else node.value
+            if ease[1] and not (positive(start) and positive(to)):
+                add(Issue("bad_segment", f"{where}: {seg.ease!r} moves by factors, so both "
+                          f"ends must be positive numbers; it goes from {start!r} to {to!r}",
+                          path=path, fix_hint=f"use {seg.ease.removeprefix(LOG)!r}"))  # fmt: skip
+                continue
+            resolved.append(ResolvedSegment(t0, t1, to, *ease))
             prev_end = t1
             duration = max(duration, t1)
         nodes[path] = ResolvedTrack(node.value, tuple(resolved))
+
+    cues: list[PlacedCue] = []
+    for cue in doc.sound.cues:
+        try:
+            t0 = time_map.resolve(cue.at)
+        except KeyError as e:
+            add(Issue("unknown_marker", f"cue {cue.id!r}: no marker {e.args[0]!r}",
+                      ids=(cue.id,), path=f"{cue.id}.at"))  # fmt: skip
+            continue
+        if t0 < 0:
+            add(Issue("bad_sound", f"cue {cue.id!r} starts at {t0:g} s, before the scene",
+                      ids=(cue.id,), path=f"{cue.id}.at"))  # fmt: skip
+            continue
+        cues.append(PlacedCue(cue.id, t0, cue))
+        # A built-in holds the scene open until it ends; a file only to its start (its length
+        # is in the file, which compiling does not read: lint ``sound_cut`` says if it is cut).
+        duration = max(duration, t0 + (builtin_seconds(cue) if cue.builtin else 0.0))
+    bed_times: list[tuple[Any, float, float | None]] = []
+    for bed in doc.sound.beds:
+        try:
+            t0 = 0.0 if bed.start is None else time_map.resolve(bed.start)
+            t1 = None if bed.end is None else time_map.resolve(bed.end)
+        except KeyError as e:
+            add(Issue("unknown_marker", f"bed {bed.id!r}: no marker {e.args[0]!r}",
+                      ids=(bed.id,)))  # fmt: skip
+            continue
+        if t0 < 0 or (t1 is not None and t1 <= t0):
+            add(Issue("bad_sound", f"bed {bed.id!r} runs from {t0:g} s to "
+                      f"{'the end' if t1 is None else f'{t1:g} s'}: it must start at 0 or "
+                      "later and end after it starts", ids=(bed.id,)))  # fmt: skip
+            continue
+        bed_times.append((bed, t0, t1))
 
     if any(o.always for o in doc.objects) and not issues:
         _attach_updaters(doc, nodes, objects, placeholders, modules, missing, add)
@@ -283,8 +327,11 @@ def compile_document(
         )  # fmt: skip
     if doc.meta.duration is not None:
         duration = doc.meta.duration
+    beds = tuple(
+        PlacedBed(b.id, t0, duration if t1 is None else t1, b) for b, t0, t1 in bed_times
+    )  # a bed does not hold the scene open
     compiled = Compiled(doc, theme, time_map, MappingProxyType(nodes), order, tuple(objects),
-                        duration, str(base_dir), tuple(missing))  # fmt: skip
+                        duration, str(base_dir), tuple(missing), beds, tuple(cues))  # fmt: skip
     evaluate(compiled, 0.0)  # surfaces type errors from expressions before anything is saved
     return compiled
 

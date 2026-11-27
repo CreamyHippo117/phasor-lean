@@ -153,8 +153,9 @@ class Desktop:
         return self.open(path) if path else None
 
     def open_example(self, example: dict[str, str]) -> DesktopWindow | None:
-        """Copy an example (and the files beside it with the same name: narration, audio)
-        to the scenes folder, then open the copy: the original stays as it was."""
+        """Copy an example (and the files beside it with the same name: narration, audio;
+        and the examples' ``assets/`` folder: pictures, meshes, music) to the scenes folder,
+        then open the copy: the original stays as it was."""
         src = Path(example["path"])
         dest_dir = scenes_folder() / "examples"
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +164,9 @@ class Desktop:
             for f in src.parent.glob(src.stem + ".*"):
                 if f.is_file() and not (dest_dir / f.name).exists():
                     shutil.copy2(f, dest_dir / f.name)
+        assets = src.parent / "assets"
+        if assets.is_dir():
+            shutil.copytree(assets, dest_dir / "assets", dirs_exist_ok=True)
         return self.open(dest)
 
     def set_math_engine(self, name: str) -> None:

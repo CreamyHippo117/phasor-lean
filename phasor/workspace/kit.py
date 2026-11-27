@@ -2,7 +2,8 @@
 
 It holds only what an AI needs to write scenes: instructions (``CLAUDE.md``, loaded at the
 start of every session), the AI docs, the example scenes sorted by kind and tier
-(``kit/examples.toml``), the ``/scene`` command, the person's ``TASTE.md`` and the phasor
+(``kit/examples.toml``), the ``/scene-plan`` and ``/scene-builder`` commands, the person's
+``TASTE.md`` and the phasor
 tools (``.mcp.json``). One source in the repository (``kit/``, ``docs/ai/``,
 ``examples/``, ``skills/``); installing copies it, so the kit never drifts from the code it
 describes (``tests/test_kit.py``).
@@ -26,7 +27,12 @@ from phasor.workspace.paths import cli_command, examples_dir
 
 TIERS = ("model", "technique", "reference", "hidden")
 PERSON_FILES = ("TASTE.md", "WISHLIST.md")
-SKILLS = {"scene": ("kit", "skills", "scene"), "phasor": ("skills", "phasor")}
+SKILLS = {
+    "scene-builder": ("kit", "skills", "scene-builder"),
+    "scene-plan": ("kit", "skills", "scene-plan"),
+    "phasor": ("skills", "phasor"),
+}
+RETIRED_SKILLS = ("scene",)  # renamed scene-builder; removed from an older kit folder
 
 
 class KitError(RuntimeError):
@@ -126,6 +132,8 @@ def install(dest: str | Path) -> dict[str, Any]:
     (dest / "CLAUDE.md").write_text(text, encoding="utf-8")
     written.append("CLAUDE.md")
 
+    for name in RETIRED_SKILLS:
+        shutil.rmtree(dest / ".claude" / "skills" / name, ignore_errors=True)
     for name, parts in SKILLS.items():
         target = dest / ".claude" / "skills" / name
         target.mkdir(parents=True, exist_ok=True)

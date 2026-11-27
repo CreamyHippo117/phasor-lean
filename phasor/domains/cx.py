@@ -28,6 +28,8 @@ from phasor.domains import fractal_math as fm
 
 F64_BELOW = 1e-4  # view heights under this render domain coloring in float64
 SUPERSAMPLE = 2  # kernel pixels per output pixel, per side, for clean contour edges
+MAP_TOL = 1e-3  # a ComplexMap line gets points until no chord strays this share of limit
+MAP_CAP = 16  # ... or until it has this many times its samples
 BUDDHA_MAX_ITER = 5000  # the cloud mode keeps whole orbits in memory: this many steps at most
 
 
@@ -550,10 +552,16 @@ class ComplexMap(ObjectBase):
     """A grid in the complex plane pushed through ``z -> f(z)``: the picture of what a
     function does to the plane. ``amount`` slides from the plain grid (0) to its image (1)
     along ``(1 - amount) z + amount f(z)``: animate it (``morph("map.amount", 1)``) to
-    watch the plane bend. The grid covers ``extent`` around the complex point ``center``,
+    watch the plane bend. That straight path can fold the grid on the way (its derivative
+    ``1 - amount + amount f'`` may vanish). With ``path="family"`` the function is a family
+    ``f(z, a)`` and the picture at ``amount`` is ``f(z, a=amount)``: a holomorphic map at
+    every step, so the grid stays conformal (preset ``roll``: ``(exp(a*z) - 1)/a``, the
+    plane rolling up round circles; a removable 0/0 at ``a = 0`` gives its limit).
+    The grid covers ``extent`` around the complex point ``center``,
     and is drawn with ``center`` at ``pos``: a point w of the image sits at
     ``pos + (w - center)`` (so with both at 0, world coordinates are the complex plane, as
-    for ``DomainColoring``). Lines break at poles."""
+    for ``DomainColoring``). Lines get extra points where they bend (``cx_math.refine``)
+    and break at poles."""
 
     type: ClassVar[str] = "complex_map"
     Style: ClassVar = {
@@ -565,10 +573,14 @@ class ComplexMap(ObjectBase):
     Presets: ClassVar = {
         "glowing": {"style": {"glow": "soft"}},
         "fine": {"params": {"lines": (21, 21)}, "style": {"stroke": "hairline"}},
+        # z -> (e^{az} - 1)/a: vertical lines roll round circles, the left half plane onto a
+        # disc (with center=(-1, 0) it ends on e^z: the s-plane onto the unit disc, z = e^{sT})
+        "roll": {"params": {"function": "(exp(a*z) - 1)/a", "path": "family"}},
     }
 
     class Params(ParamsBase):
-        function: str = Field("z**2", min_length=1)
+        function: str = Field("z**2", min_length=1)  # with path "family": f(z, a)
+        path: Literal["linear", "family"] = "linear"  # how amount goes from z to f
         pos: Vec3 = (0.0, 0.0, 0.0)  # where the grid's centre is drawn
         center: tuple[float, float] = (0.0, 0.0)  # the complex point at the grid's centre
         extent: tuple[float, float] = (4.0, 4.0)
@@ -580,14 +592,12 @@ class ComplexMap(ObjectBase):
         @field_validator("function")
         @classmethod
         def _check(cls, v: str) -> str:
-            from phasor.render.gpu.codegen import A, FunctionError
+            from phasor.render.gpu.codegen import FunctionError
 
             try:
-                f = _parse(v.strip())
+                _parse(v.strip())
             except FunctionError as e:
                 raise ValueError(str(e)) from None
-            if f.expr.has(A):
-                raise ValueError("the constant a is for cx.DomainColoring only")
             return v
 
         @field_validator("lines")
@@ -596,6 +606,19 @@ class ComplexMap(ObjectBase):
             if min(v) < 0 or max(v) > 200 or sum(v) == 0:
                 raise ValueError("lines is (vertical, horizontal), each 0 to 200, not both 0")
             return v
+
+        @model_validator(mode="after")
+        def _family(self):
+            from phasor.render.gpu.codegen import A
+
+            has_a = _parse(self.function.strip()).expr.has(A)
+            if has_a and self.path == "linear":
+                raise ValueError("the constant a is for cx.DomainColoring only, or for "
+                                 "path='family' (where a is amount)")  # fmt: skip
+            if not has_a and self.path == "family":
+                raise ValueError("path='family' needs the constant a in the function: "
+                                 "f(z, a), drawn at a = amount")  # fmt: skip
+            return self
 
     def _runs(self, p) -> tuple[tuple[int, np.ndarray], ...]:
         """((family 0 vertical / 1 horizontal, (K, 3) world points), ...), read-only."""
@@ -615,7 +638,7 @@ class ComplexMap(ObjectBase):
         p = self.me(state).params
         f = _parse(p.function.strip())
         return {"kind": "complex_map", "function": f.source, "latex": f.latex(),
-                "amount": round(p.amount, 6), "lines": int(sum(p.lines)),
+                "amount": round(p.amount, 6), "path": p.path, "lines": int(sum(p.lines)),
                 "pieces": len(self._runs(p))}  # fmt: skip
 
     def draw(self, ctx: DrawContext, state: SceneState, pass_: Pass) -> None:
@@ -640,9 +663,13 @@ def _map_runs(p) -> tuple[tuple[int, np.ndarray], ...]:
     z0 = complex(*p.center)
     shift = complex(p.pos[0], p.pos[1]) - z0
     out = []
+
+    def g(z: np.ndarray) -> np.ndarray:
+        return xm.map_at(f, z, p.amount, p.path)
+
     for k, line in enumerate(xm.grid_lines(z0, p.extent, p.lines, p.samples)):
         fam = 0 if k < p.lines[0] else 1
-        w = xm.deform(f, line, p.amount)
+        _, w = xm.refine(g, line, g(line), MAP_TOL * p.limit, p.limit, MAP_CAP * p.samples)
         for run in xm.split_runs(w, p.limit):
             run = run + shift
             pts = np.stack([run.real, run.imag, np.full(len(run), p.pos[2])], 1)

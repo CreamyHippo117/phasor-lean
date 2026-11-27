@@ -186,6 +186,56 @@ def repace(narration: Narration, extra: Sequence[float], gap: float, lead: float
     return Narration(script=narration.script, voice=narration.voice, blocks=tuple(out))
 
 
+def move_block(narration: Narration, k: int, start: float) -> Narration:
+    """Block ``k`` moved to start at ``start`` seconds, kept between its neighbours (it may
+    not overlap the sentence before or after). Its words and markers move with it, and so
+    does everything anchored to those markers. ``IndexError`` for a block that is not there."""
+    blocks = narration.blocks
+    b = blocks[k]
+    lo = blocks[k - 1].start + blocks[k - 1].duration if k > 0 else 0.0
+    hi = blocks[k + 1].start - b.duration if k + 1 < len(blocks) else float("inf")
+    t = round(min(max(float(start), lo), max(hi, lo)), 4)
+    moved = NarrationBlock.model_validate({**b.model_dump(), "start": t})
+    out = (*blocks[:k], moved, *blocks[k + 1 :])
+    return Narration(script=narration.script, voice=narration.voice, blocks=out)
+
+
+def add_block(narration: Narration | None, block: NarrationBlock) -> Narration:
+    """``narration`` with one more spoken block (your own recording, say) in time order.
+    ``ValueError`` when it would overlap a block already there: two voices never talk at
+    once. Its text joins the script, so the script still reads in order."""
+    blocks = narration.blocks if narration else ()
+    end = block.start + block.duration
+    for k, b in enumerate(blocks):
+        if b.text and block.start < b.start + b.duration and b.start < end:
+            raise ValueError(f"it would overlap sentence {k} ({b.start:g}-{b.start + b.duration:g}"
+                             " s); drop it before or after, or move that one")  # fmt: skip
+    out = sorted((*blocks, block), key=lambda b: b.start)
+    script = "\n".join(b.text for b in out if b.text)
+    voice = "recorded" if narration is None else narration.voice
+    return Narration(script=script, voice=voice, blocks=tuple(out))
+
+
+def remove_block(narration: Narration, k: int) -> Narration | None:
+    """``narration`` without block ``k`` (None when nothing is left). Its markers go too,
+    so whatever was anchored to them must move first (the document refuses otherwise)."""
+    out = tuple(b for i, b in enumerate(narration.blocks) if i != k)
+    if not any(b.text for b in out):
+        return None
+    script = "\n".join(b.text for b in out if b.text)
+    return Narration(script=script, voice=narration.voice, blocks=out)
+
+
+def mark_block(narration: Narration, k: int, name: str, at: float) -> Narration:
+    """``narration`` with a marker ``name`` at ``at`` seconds into block ``k``: it belongs to
+    the block, so it moves when the block moves (a word in your recording, say)."""
+    b = narration.blocks[k]
+    markers = {**b.markers, name: round(min(max(at, 0.0), b.duration), 4)}
+    moved = NarrationBlock.model_validate({**b.model_dump(), "markers": markers})
+    blocks = (*narration.blocks[:k], moved, *narration.blocks[k + 1 :])
+    return Narration(script=narration.script, voice=narration.voice, blocks=blocks)
+
+
 def block_of(narration: Narration, t: float) -> int | None:
     """Index of the block that is playing, or last played, at time ``t``."""
     k = None
@@ -210,9 +260,11 @@ def read_wav(path: str | Path) -> tuple[np.ndarray, int]:
 
 
 def write_wav(path: str | Path, samples: np.ndarray, rate: int) -> None:
+    """16-bit WAV: ``samples`` shape (n,) mono or (n, channels)."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
+    samples = np.asarray(samples)
     with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(1 if samples.ndim == 1 else samples.shape[1])
         w.setsampwidth(2)
         w.setframerate(rate)
         w.writeframes(np.asarray(samples, dtype=np.int16).tobytes())

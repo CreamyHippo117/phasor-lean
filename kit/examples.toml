@@ -35,10 +35,25 @@ kind = "complex"
 tier = "technique"
 teaches = "A narrated short: [[markers]] in the narration, every motion anchored to a marker with a verb"
 
+[examples.sound_harmonics]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "Sound cues: s.cue(marker, \"tone\", midi=...) puts a synthesized note on a marker, so the soundtrack moves with the picture"
+
+[examples.sound_bed]
+kind = "complex"
+tier = "technique"
+teaches = "A bed under the narration: s.bed loops an ambient file under the voice and ducks it while the voice speaks; built-in cues (whoosh, pop, chime) on markers"
+
 [examples.residues]
 kind = "complex"
 tier = "technique"
 teaches = "Domain coloring of a function with a glowing contour on top"
+
+[examples.s_plane_roll]
+kind = "complex"
+tier = "technique"
+teaches = "A conformal morph (ComplexMap path=family, preset roll) wrapping the s-plane onto the unit disc, then a 600x log-eased zoom"
 
 [examples.riemann_sqrt]
 kind = "three_d"
@@ -160,6 +175,36 @@ kind = "physics"
 tier = "technique"
 teaches = "Sound in a 3D room: rays and fronts bouncing off the walls, an orbiting camera, an impulse response filling in"
 
+[examples.echo_crystal]
+kind = "physics"
+tier = "technique"
+teaches = "A lattice flashing as a surface sweeps it: the image sources of a room lit by the sphere of time since a clap, then the sphere opening into a plane"
+
+[examples.mirror_rooms]
+kind = "physics"
+tier = "technique"
+teaches = "The unfold verb: a ray bouncing in a room becomes a straight line through mirror rooms that swing over like pages"
+
+[examples.kaleidoscope]
+kind = "physics"
+tier = "technique"
+teaches = "Unfolding in a polygon: a ray in a triangle of mirrors runs straight through the copies that tile the plane"
+
+[examples.spider_and_fly]
+kind = "three_d"
+tier = "technique"
+teaches = "A net folding and unfolding: the shortest path on a box (the spider and the fly, 40 not 42) bends over its edges and lies straight on its net"
+
+[examples.echo_lattice]
+kind = "physics"
+tier = "technique"
+teaches = "Echoes of K feedback loops as the lattice N^K seen in 3D: a grid that flashes as arrival time sweeps it, then a star gaining arms until the frame fills"
+
+[examples.echo_room_to_loops]
+kind = "physics"
+tier = "technique"
+teaches = "Two lattices composed on one clock: a room's echo crystal swept by a sphere that flattens into a plane, the plane handed over to three feedback loops' grid, then the star growing to sixteen arms"
+
 [examples.linear_system]
 kind = "fourier_linalg"
 tier = "technique"
@@ -175,10 +220,20 @@ kind = "fourier_linalg"
 tier = "technique"
 teaches = "A low-pass filter: poles and zeros over its transfer function, gain and phase, a signal and its spectrum cut"
 
+[examples.reverb_modes]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "The modes of a filter as turning, shrinking hands on a spiral, hue by angle, with the exact motion blur of the fast ones"
+
 [examples.fourier_winding]
 kind = "fourier_linalg"
 tier = "technique"
 teaches = "The Fourier transform as a winding picture: a wound signal, its centre of mass and the spectrum it traces"
+
+[examples.aliasing]
+kind = "fourier_linalg"
+tier = "technique"
+teaches = "Sampling and aliasing, the wagon wheel: sweep the sample rate down and the slowest wave through the samples appears, runs backwards, stops"
 
 [examples.prism_spectrogram]
 kind = "fourier_linalg"

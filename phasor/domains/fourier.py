@@ -6,6 +6,7 @@
     s.add(fourier.PartialSum(id="wave", kind="square", terms=9))
     s.add(fourier.Spectrum(id="spec", frequencies=(100.5,), amplitudes=(1.0,), window="hann"))
     s.add(fourier.Spectrogram(id="sg", f0=200, f1=1200))
+    s.add(fourier.Aliasing(id="al", frequencies=(5.0,), fs=7.0))  # sampling and aliasing
 
 Numerics are in ``fourier_math``; these draw them. Everything is a pure function of the
 parameters.
@@ -28,8 +29,22 @@ from phasor.core.objects import Bounds, DrawContext, ObjectBase, ParamsBase, Pas
 from phasor.core.state import SceneState
 from phasor.core.values import Vec3
 from phasor.domains import fourier_math as fm
-from phasor.domains.heatmap import PRISM, HeatParams, heat_pixels, lut_colour, wheel_colour
-from phasor.domains.strokes import circle, disc, hue_colors, polyline, with_alpha
+from phasor.domains.heatmap import (
+    PRISM,
+    HeatParams,
+    Recipe,
+    heat_pixels,
+    wheel_recipe,
+)
+from phasor.domains.strokes import (
+    circle,
+    disc,
+    disc_batch,
+    hue_colors,
+    polyline,
+    segment_batch,
+    with_alpha,
+)
 
 
 def _ydir(me, state: SceneState) -> float:
@@ -471,6 +486,20 @@ MAX_FORMULA_SAMPLES = 400_000  # a formula is evaluated sample by sample
 MAX_FRAMES = 1500  # the hop widens for long sounds so a wav never makes more columns than this
 
 
+def _formula_in_t(v: str) -> str:
+    """Check a signal formula: it may use ``t`` (seconds) and constants, not other parameters."""
+    if v:
+        from phasor.time.expr import ExprError, compile_expr
+
+        try:
+            c = compile_expr(v)
+        except ExprError as e:
+            raise ValueError(str(e)) from e
+        if c.deps:
+            raise ValueError(f"{v!r}: a signal is a formula in t only, not {sorted(c.deps)}")
+    return v
+
+
 @functools.lru_cache(maxsize=8)
 def _stft(source: str, ref: str, mtime: float, f0: float, f1: float, duration: float, fs: float,
           nwin: int, hop: int, win: str) -> dict[str, Any]:  # fmt: skip
@@ -537,17 +566,7 @@ class Spectrogram(ObjectBase):
         @field_validator("signal")
         @classmethod
         def _formula_in_t(cls, v: str) -> str:
-            if v:
-                from phasor.time.expr import ExprError, compile_expr
-
-                try:
-                    c = compile_expr(v)
-                except ExprError as e:
-                    raise ValueError(str(e)) from e
-                if c.deps:
-                    raise ValueError(f"{v!r}: a signal is a formula in t only, not "
-                                     f"{sorted(c.deps)}")  # fmt: skip
-            return v
+            return _formula_in_t(v)
 
         @model_validator(mode="after")
         def _one_source(self):
@@ -616,18 +635,15 @@ class Spectrogram(ObjectBase):
         lut = ramp(me.style["colormap"], np.float32)  # strongest = brightest (ocean is cyclic)
         corner, right, up = self._rect(p)
         glow = float(me.style.get("glow", 1.0))
-        paint = lut_colour(lut, "linear" if p.smooth else "nearest")
-        wheel = wheel_colour(me.style["colormap"], p)
-
-        def up_hue(v, u, h):  # prism: the hue of the frequency (its place up the panel)
-            return np.broadcast_to(wheel(h)[:, None], (*v.shape, 3))
-
+        # the signal is the square root of the magnitude: level, weight and (plain) colour
+        how = {"transform": "sqrt", "weight": "value" if glow > 1 else None}
+        if p.hue_cycles > 0:  # prism: the hue of the frequency (its place up the panel)
+            recipe = wheel_recipe(me.style["colormap"], p, hue_of="height", **how)
+        else:
+            recipe = Recipe(lut=lut, blend=p.smooth, **how)
         pixels = heat_pixels(
-            mag.T, p.size, lambda v: paint(np.sqrt(np.clip(v, 0, 1))), cells=True,
-            how="smooth" if p.smooth else "nearest", level=lambda v: np.sqrt(np.clip(v, 0, 1)),
-            weight=(lambda v: np.sqrt(np.clip(v, 0, 1))) if glow > 1 else None,
+            mag.T, p.size, recipe, cells=True, how="smooth" if p.smooth else "nearest",
             background=state.background, **p.drawing(),
-            colour_at=up_hue if p.hue_cycles > 0 else None,
         )  # fmt: skip
         ctx.field(corner, right, up, pixels=pixels, opacity=p.opacity, glow=glow)
         if p.playhead >= 0 and pass_ == "color":
@@ -637,3 +653,358 @@ class Spectrogram(ObjectBase):
             w = me.style["stroke"] * float(cam.units_per_height(np.asarray(line[0])))
             polyline(ctx, cam, line, w, color=with_alpha(me.style["playhead"], p.opacity),
                      glow=2.5)  # fmt: skip
+
+
+# ---------------------------------------------------------------- Aliasing
+
+
+MAX_ALIAS_SAMPLES = 4000  # samples in the window (duration * fs)
+_SINC_PAD = 48  # samples taken beyond each end of the window for the sinc sum
+_LOW = 0.30  # the spectrum and wheel strip, as a share of the height
+_GAP = 0.12  # between the wave and the strip
+
+
+@functools.lru_cache(maxsize=32)
+def _formula_values(signal: str, times: tuple) -> np.ndarray:
+    from phasor.time.expr import compile_expr
+
+    fn = compile_expr(signal)
+    return np.array([float(fn({}, t)) for t in times], dtype=np.float64)
+
+
+@functools.lru_cache(maxsize=32)
+def _alias_data(signal: str, tones: tuple, fs: float, start: float, duration: float,
+                sinc: bool) -> dict[str, Any]:  # fmt: skip
+    """The window's drawing grid, the true signal and the reconstruction on it, the sampling
+    instants and their values. ``tones`` is ((f, a, phase), ...) when there is no formula."""
+    stop = start + duration
+    fastest = max((f for f, _, _ in tones), default=fs)
+    n = int(np.clip(48 * max(fastest, fs / 2) * duration, 400, 6000))
+    grid = np.linspace(start, stop, n)
+    ts = fm.sample_times(fs, start, stop)
+    f, a, ph = (tuple(v[i] for v in tones) for i in range(3)) if tones else ((), (), ())
+
+    def true(t):
+        t = np.asarray(t, dtype=np.float64)
+        return _formula_values(signal, tuple(t.tolist())) if signal else fm.tone_sum(f, a, ph, t)
+
+    x = true(ts)
+    if sinc:  # samples beyond the window too, so the sum is not cut off at its edges
+        k0 = math.ceil(start * fs - 1e-9) - _SINC_PAD
+        wide = (k0 + np.arange(len(ts) + 2 * _SINC_PAD)) / fs
+        xw = true(wide)
+        rec = fm.sinc_reconstruct(xw, fs, grid, wide[0])
+        at = fm.sinc_reconstruct(xw, fs, ts, wide[0])
+    else:
+        rec = fm.alias_signal(f, a, ph, fs, grid)
+        at = fm.alias_signal(f, a, ph, fs, ts)
+    wave = true(grid)
+    top = max(sum(abs(v) for v in a) if tones else float(np.abs(wave).max()), 1e-9)
+    return {"grid": grid, "wave": wave, "rec": rec, "ts": ts, "x": x, "at": at, "top": top}
+
+
+@register
+class Aliasing(ObjectBase):
+    """Sampling and aliasing: a signal (a sum of tones ``a sin(2 pi f t + phase)``, or a formula
+    in ``t`` seconds), the instants ``k / fs`` it is sampled at as stems with a beacon on each,
+    and the slowest wave through those samples in a second hue. For tones that is the sum of
+    their aliases (``reconstruct="alias"``: each tone folded into [0, fs / 2], its phase
+    reflected when it folds from the upper half); ``"sinc"`` (always, for a formula) is the
+    band-limited reconstruction from the samples. Below the wave, for tones: a spectrum
+    (``spectrum``) with the true lines, their aliases mirrored about the Nyquist mark ``fs/2``
+    and an arc from each folded line to its alias, and a wheel (``wheel``): the strongest
+    tone's phasor at the last ``wheel_samples`` samples, with the turn it really makes in one
+    sample (the inner spiral) and the short turn the eye sees (the outer arc; backwards when
+    the alias runs backwards). ``fs`` can be swept: the alias slows, stops at ``fs = f`` and
+    turns round. ``reveal`` (0..1 of the window) is how far the samples have been taken."""
+
+    type: ClassVar[str] = "aliasing"
+    Style: ClassVar = {
+        "color": ("emphasis", "secondary"),  # the true signal
+        "alias": ("emphasis", "highlight"),  # the wave the samples also fit
+        "sample": ("emphasis", "primary"),  # the stems and beacons
+        "axis": ("emphasis", "muted"),
+        "text": ("emphasis", "muted"),
+        "size": ("text", "annotation"),
+        "stroke": ("stroke", "regular"),
+        "glow": ("glow", "none"),
+    }
+
+    class Params(ParamsBase):
+        frequencies: tuple[float, ...] = (5.0,)  # the tones, Hz
+        amplitudes: tuple[float, ...] = (1.0,)
+        phases: tuple[float, ...] = ()  # radians, one per tone; empty: all 0
+        signal: str = ""  # a formula in t (seconds) instead of the tones
+        fs: float = Field(12.0, gt=0, allow_inf_nan=False)  # the sample rate, Hz
+        start: float = Field(0.0, allow_inf_nan=False)  # the window: start .. start + duration
+        duration: float = Field(2.0, gt=0, allow_inf_nan=False)
+        reconstruct: Literal["alias", "sinc"] = "alias"
+        reveal: float = Field(1.0, ge=0, le=1)  # share of the window sampled so far
+        spectrum: bool = True  # the folding picture under the wave (tones only)
+        wheel: bool = True  # the strobed phasor beside it (tones only)
+        wheel_samples: int = Field(6, ge=2, le=24)
+        fmax: float = Field(0.0, ge=0, allow_inf_nan=False)  # spectrum axis; 0: automatic
+        pos: Vec3 = (0.0, 0.0, 0.0)  # the picture's centre
+        extent: tuple[float, float] = (11.0, 6.0)
+
+        @field_validator("signal")
+        @classmethod
+        def _formula(cls, v: str) -> str:
+            return _formula_in_t(v)
+
+        @model_validator(mode="after")
+        def _tones(self):
+            if len(self.amplitudes) != len(self.frequencies):
+                raise ValueError("amplitudes needs one value per frequency")
+            if self.phases and len(self.phases) != len(self.frequencies):
+                raise ValueError("phases needs one value per frequency (or none)")
+            if not self.signal and not self.frequencies:
+                raise ValueError("give at least one tone or a signal formula")
+            if any(f < 0 or not math.isfinite(f) for f in self.frequencies):
+                raise ValueError("tone frequencies must be finite and not negative")
+            if self.duration * self.fs > MAX_ALIAS_SAMPLES:
+                raise ValueError(
+                    f"too many samples: {self.duration * self.fs:.0f} in the window "
+                    f"(at most {MAX_ALIAS_SAMPLES}; lower duration or fs)"
+                )
+            return self
+
+    # -------------------------------------------------------- numbers
+
+    @staticmethod
+    def _tones_of(p) -> tuple:
+        if p.signal:
+            return ()
+        ph = p.phases or (0.0,) * len(p.frequencies)
+        return tuple(zip(p.frequencies, p.amplitudes, ph, strict=True))
+
+    def _data(self, p) -> dict[str, Any]:
+        sinc = bool(p.signal) or p.reconstruct == "sinc"
+        return _alias_data(p.signal, self._tones_of(p), p.fs, p.start, p.duration, sinc)
+
+    @staticmethod
+    def _fmax(p) -> float:
+        if p.fmax > 0:
+            return p.fmax
+        return 2.2 * max(max(p.frequencies, default=0.0), p.fs / 2, 1e-9)
+
+    # -------------------------------------------------------- layout
+
+    def _boxes(self, p) -> dict[str, tuple[float, float, float, float]]:
+        """Each panel's (u0, v0, u1, v1) as shares of the extent, from the lower left."""
+        low = not p.signal and (p.spectrum or p.wheel)
+        out = {"wave": (0.0, _LOW + _GAP if low else 0.0, 1.0, 1.0)}
+        if low:
+            side = _LOW * p.extent[1] / p.extent[0]  # the wheel is square
+            if p.wheel:
+                out["wheel"] = (1.0 - side, 0.0, 1.0, _LOW)
+            if p.spectrum:
+                out["spectrum"] = (0.0, 0.0, 1.0 - (side + 0.05 if p.wheel else 0.0), _LOW)
+        return out
+
+    def _at(self, me, state: SceneState, box):
+        """(u, v) shares of a panel -> world points (v grows upward on screen either way)."""
+        p = me.params
+        sign = _ydir(me, state)
+        u0, v0, u1, v1 = box
+        W, H = p.extent
+        x0, yc, z = p.pos[0] - W / 2, p.pos[1], p.pos[2]
+
+        def at(u, v):
+            u, v = np.asarray(u, dtype=np.float64), np.asarray(v, dtype=np.float64)
+            uu, vv = u0 + u * (u1 - u0), v0 + v * (v1 - v0)
+            return np.stack([x0 + uu * W, yc + sign * (vv - 0.5) * H,
+                             np.full(np.broadcast(uu, vv).shape, z)], axis=-1)  # fmt: skip
+
+        return at
+
+    def _wave_points(self, me, state, d, t, y):
+        p = me.params
+        at = self._at(me, state, self._boxes(p)["wave"])
+        return at((np.asarray(t) - p.start) / p.duration, 0.5 + 0.44 * np.asarray(y) / d["top"])
+
+    @staticmethod
+    def _shown(p, d) -> int:
+        """How many of the window's samples have been taken (``reveal``)."""
+        edge = p.start + p.reveal * p.duration
+        return int(np.searchsorted(d["ts"], edge + 1e-9, side="right"))
+
+    # -------------------------------------------------------- contract
+
+    def world_bounds(self, state: SceneState) -> Bounds:
+        p = self.me(state).params
+        c = np.asarray(p.pos, dtype=np.float64)
+        half = np.array([p.extent[0] / 2, p.extent[1] / 2, 0.0])
+        return Bounds(tuple(c - half), tuple(c + half))
+
+    def features(self, state: SceneState) -> dict[str, np.ndarray]:
+        me = self.me(state)
+        p = me.params
+        d = self._data(p)
+        out = {"center": np.asarray(p.pos, dtype=np.float64),
+               "samples": self._wave_points(me, state, d, d["ts"], d["x"]),
+               "alias_at_samples": self._wave_points(me, state, d, d["ts"], d["at"])}  # fmt: skip
+        box = self._boxes(p).get("spectrum")
+        if box is not None:
+            out["nyquist"] = self._at(me, state, box)(min(p.fs / 2 / self._fmax(p), 1.0), 0.22)
+        return out
+
+    def semantics(self, state: SceneState) -> dict[str, Any]:
+        p = self.me(state).params
+        d = self._data(p)
+        out: dict[str, Any] = {
+            "kind": "aliasing",
+            "fs": p.fs,
+            "nyquist": p.fs / 2,
+            "samples": len(d["ts"]),
+            "samples_shown": self._shown(p, d),
+            "reconstruction": "sinc" if p.signal or p.reconstruct == "sinc" else "alias",
+            "frequencies": None,
+            "alias_frequencies": None,
+            "reversed": None,
+            "turns_per_sample": None,
+            "aliased": None,
+        }
+        tones = self._tones_of(p)
+        if tones:
+            al = [fm.alias_tone(f, p.fs, a, ph) for f, a, ph in tones]
+            folded = [float(fm.fold(f, p.fs)) for f, _, _ in tones]
+            out.update(
+                frequencies=[float(f) for f, _, _ in tones],
+                alias_frequencies=[round(v[0], 9) for v in al],
+                reversed=[v < 0 for v in folded],
+                turns_per_sample=[round(v / p.fs, 9) for v in folded],
+                aliased=any(f > 0 and f >= p.fs / 2 * (1 - 1e-12) for f, _, _ in tones),
+            )
+        return out
+
+    # -------------------------------------------------------- drawing
+
+    def draw(self, ctx: DrawContext, state: SceneState, pass_: Pass) -> None:
+        me = self.me(state)
+        p = me.params
+        cam = state.camera_for(me)
+        unit = float(cam.units_per_height(np.asarray(p.pos, dtype=np.float64)))
+        w = me.style["stroke"] * unit
+        glow = me.style["glow"]
+        beacon = glow * 1.2 if glow > 1.0 else 1.0
+        d = self._data(p)
+        boxes = self._boxes(p)
+        alias = with_alpha(me.style["alias"], p.opacity)
+        sample = with_alpha(me.style["sample"], p.opacity)
+        faint = with_alpha(me.style["axis"], p.opacity * 0.5)
+
+        # the wave: its baseline, the true signal, the samples taken so far and their alias
+        at = self._at(me, state, boxes["wave"])
+        polyline(ctx, cam, at([0, 1], [0.5, 0.5]), w * 0.5, color=faint)
+        m = self._shown(p, d)
+        if m:  # the alias under the true wave: where they agree, both still show
+            edge = d["ts"][m - 1] if p.reveal < 1 else p.start + p.duration
+            keep = d["grid"] <= edge + 1e-12
+            if keep.sum() >= 2:
+                rec = np.clip(d["rec"][keep], -1.1 * d["top"], 1.1 * d["top"])
+                pts = self._wave_points(me, state, d, d["grid"][keep], rec)
+                polyline(ctx, cam, pts, w * 2.0, color=alias, glow=glow)
+        polyline(ctx, cam, self._wave_points(me, state, d, d["grid"], d["wave"]), w,
+                 color=with_alpha(me.style["color"], p.opacity * 0.9), glow=glow)  # fmt: skip
+        if m:
+            tops = self._wave_points(me, state, d, d["ts"][:m], d["x"][:m])
+            feet = self._wave_points(me, state, d, d["ts"][:m], np.zeros(m))
+            segment_batch(ctx, cam, feet, tops, me.style["stroke"] * 0.6,
+                          colors=with_alpha(sample, 0.55), glow=1.0)  # fmt: skip
+            disc_batch(ctx, cam, tops, unit * 0.011, colors=sample, glow=beacon)
+
+        tones = self._tones_of(p)
+        if "spectrum" in boxes:
+            self._draw_spectrum(ctx, cam, me, state, boxes["spectrum"], tones, unit)
+        if "wheel" in boxes and m:
+            self._draw_wheel(ctx, cam, me, state, boxes["wheel"], tones, d["ts"][:m], unit)
+
+    def _draw_spectrum(self, ctx, cam, me, state, box, tones, unit) -> None:
+        p = me.params
+        glow = me.style["glow"]
+        w = me.style["stroke"] * unit
+        at = self._at(me, state, box)
+        true = with_alpha(me.style["color"], p.opacity)
+        alias = with_alpha(me.style["alias"], p.opacity)
+        faint = with_alpha(me.style["axis"], p.opacity * 0.5)
+        text = with_alpha(me.style["text"], p.opacity)
+        size = me.style["size"] * unit
+        fmax = self._fmax(p)
+        base, tall = 0.22, 0.62  # the axis and the tallest line, as shares of the panel
+
+        def u(f):
+            return np.asarray(f, dtype=np.float64) / fmax
+
+        polyline(ctx, cam, at([0, 1], [base, base]), w * 0.5, color=faint)
+        # what the samples can show, DC to Nyquist, lit faintly in the alias's hue
+        polyline(ctx, cam, at([0, u(min(p.fs / 2, fmax))], [base, base]), w * 2.2,
+                 color=with_alpha(alias, 0.3))  # fmt: skip
+        for f, label in ((p.fs / 2, "fs/2"), (p.fs, "fs")):
+            if f <= fmax:
+                polyline(ctx, cam, at([u(f), u(f)], [base, base + tall * 1.25]), w * 0.5,
+                         color=faint)  # fmt: skip
+                ctx.text(label, at(u(f), base - 0.16), size, color=text, glow=1.0)
+        top = max(sum(abs(a) for _, a, _ in tones), 1e-9)
+        lines: dict[float, complex] = {}  # tones that fold onto one frequency add as phasors
+        for f, a, ph in tones:
+            fa, aa, pa = fm.alias_tone(f, p.fs, a, ph)
+            key = round(fa, 9)
+            lines[key] = lines.get(key, 0j) + aa * complex(math.cos(pa), math.sin(pa))
+        for fa, c in lines.items():  # the aliases under the true lines, as in the wave
+            if abs(c) > 1e-12 and fa <= fmax:
+                h = base + tall * abs(c) / top
+                polyline(ctx, cam, at([u(fa), u(fa)], [base, h]), w * 2.8, color=alias,
+                         glow=glow)  # fmt: skip
+        for f, a, ph in tones:
+            fa = fm.alias_tone(f, p.fs, a, ph)[0]
+            h = base + tall * abs(a) / top
+            if f <= fmax:
+                polyline(ctx, cam, at([u(f), u(f)], [base, h]), w * 1.6, color=true, glow=glow)
+            if abs(fa - f) > 1e-9 * max(f, 1.0):  # folded: an arc from the line to its alias
+                s = np.linspace(0.0, 1.0, 48)
+                f0 = min(f, fmax)
+                lift = h + 0.06 + 0.14 * np.sin(math.pi * s)
+                polyline(ctx, cam, at(u(f0 + (fa - f0) * s), lift), w * 0.6,
+                         color=with_alpha(alias, 0.55), glow=glow)  # fmt: skip
+
+    def _draw_wheel(self, ctx, cam, me, state, box, tones, ts, unit) -> None:
+        p = me.params
+        glow = me.style["glow"]
+        beacon = glow * 1.2 if glow > 1.0 else 1.0
+        w = me.style["stroke"] * unit
+        true = with_alpha(me.style["color"], p.opacity)
+        alias = with_alpha(me.style["alias"], p.opacity)
+        sample = with_alpha(me.style["sample"], p.opacity)
+        faint = with_alpha(me.style["axis"], p.opacity * 0.5)
+        f, _, ph = max(tones, key=lambda tone: abs(tone[1]))
+        centre = self._at(me, state, box)(0.5, 0.5)
+        radius = 0.34 * _LOW * p.extent[1]
+        sign = _ydir(me, state)
+
+        def ring(theta, r):
+            theta = np.asarray(theta, dtype=np.float64)
+            r = np.broadcast_to(np.asarray(r, dtype=np.float64), theta.shape)
+            return np.stack([centre[0] + r * np.cos(theta),
+                             centre[1] + sign * r * np.sin(theta),
+                             np.full(theta.shape, centre[2])], axis=-1)  # fmt: skip
+
+        circle(ctx, cam, centre, radius, w * 0.5, color=faint)
+        polyline(ctx, cam, ring(np.array([math.pi, 0.0]), radius), w * 0.4, color=faint)
+        ts = ts[-p.wheel_samples :]
+        theta = 2 * math.pi * f * ts + ph  # the phasor's angle: its height is the sample
+        k = len(ts)
+        if k >= 2:  # the last step: the turn it really makes, and the short one it seems to
+            step = 2 * math.pi * f / p.fs
+            s = np.linspace(0.0, 1.0, max(int(48 * (1 + abs(step) / math.pi)), 24))
+            spiral = ring(theta[-2] + step * s, radius * (0.4 + 0.42 * s))
+            polyline(ctx, cam, spiral, w * 0.8, color=with_alpha(true, 0.8), glow=glow)
+            seen = 2 * math.pi * float(fm.fold(f, p.fs)) / p.fs
+            arc = ring(theta[-2] + seen * s, radius * 1.2)
+            polyline(ctx, cam, arc, w * 1.6, color=alias, glow=glow)
+            disc_batch(ctx, cam, arc[-1:], unit * 0.008, colors=alias, glow=beacon)
+        dots = ring(theta, radius)
+        polyline(ctx, cam, np.array([centre, dots[-1]]), w * 0.8, color=sample)
+        light = np.tile(np.array(sample, dtype=np.float64), (k, 1))
+        light[:, 3] *= np.linspace(0.3, 1.0, k)
+        disc_batch(ctx, cam, dots, unit * 0.010, colors=light, glow=beacon)

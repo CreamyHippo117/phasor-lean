@@ -17,6 +17,7 @@ from phasor.domains import fractal_math as fm
 from phasor.render import gpu
 from phasor.render.gpu import ComplexFunction, FunctionError, KernelError, Tile, plan_tiles
 from phasor.render.gpu.kernels.fractal import precision_for
+from phasor.render.gpu.kernels.heat import Recipe
 from phasor.render.gpu.registry import active_backend, get, kernel, plane, registered
 from tests import cuda_emu
 
@@ -58,6 +59,22 @@ WAVE_ONE = np.array([[0.3, -0.2, 1.0, 0.0, 1e30]])
 WAVE_TWO = np.array([[-0.5, 0.0, 1.0, 0.0, 1e30], [0.5, 0.1, 0.8, 1.0, 1.2]])
 WAVE_FOUR = np.array([[0.0, y, 1.0, 0.9 * k, 1e30 if k else 1.5]
                       for k, y in enumerate((-0.6, -0.2, 0.2, 0.6))])  # fmt: skip
+
+# For the heat kernel: a smooth grid with noise on it (values a little outside 0..1 too), a
+# colormap, a signed field per pixel (two channels, as ``wave_field`` makes), and the view
+# of a 4 x 3 rectangle that reaches past its edges. PRISM_HEAT: every part of the prism look.
+_HEAT_RNG = np.random.default_rng(11)
+_HX, _HY = np.linspace(0, 1, 23), np.linspace(0, 1, 17)
+HEAT_GRID = (0.5 + 0.45 * np.sin(5 * _HX)[:, None] * np.cos(4 * _HY)[None, :]
+             + 0.08 * _HEAT_RNG.standard_normal((23, 17)))  # fmt: skip
+HEAT_LUT = _HEAT_RNG.random((64, 4))
+HEAT_IMAGE = np.ascontiguousarray(
+    _HEAT_RNG.normal(0.0, 0.6, (48, 64, 4)).astype(np.float32).cumsum(axis=1) / 4
+)
+HEAT_BG = (0.02, 0.03, 0.06, 1.0)
+HEAT_VIEW = {"center": (1.9, 1.6), "height": 3.3, "size": (4.0, 3.0)}
+PRISM_HEAT = {"isolines": 8, "ambient": 0.0, "fade": 0.1, "contrast": 2.0,
+              "background": HEAT_BG}  # fmt: skip
 
 # name -> list of (tile, params) cases every backend must agree on
 CASES = {
@@ -153,6 +170,39 @@ CASES = {
         (FULL, {"sources": WAVE_FOUR, "center": (0.0, 0.0), "height": 5.0, "wavenumber": 7.5,
                 "omega_t": -0.7, "precision": "f64"}),
     ],
+    "heat_shade": [
+        # plain pictures: the table's nearest entry, a blended table on cell centres
+        (FULL, {**HEAT_VIEW, "grid": HEAT_GRID, "recipe": Recipe(lut=HEAT_LUT)}),
+        (OFFSET, {**HEAT_VIEW, "grid": HEAT_GRID, "cells": True, "how": "nearest",
+                  "recipe": Recipe(lut=HEAT_LUT, blend=True, transform="sqrt")}),
+        # the prism look on a grid: smooth, hue wheel, isolines, weight, contrast, fade
+        (FULL, {**HEAT_VIEW, "grid": HEAT_GRID, "how": "smooth", **PRISM_HEAT,
+                "recipe": Recipe(colour="wheel", lut=HEAT_LUT, hue_cycles=1.6, hue=-0.3,
+                                 weight="value")}),
+        (OFFSET, {**HEAT_VIEW, "grid": HEAT_GRID - 0.5, "how": "smooth", "cells": True,
+                  **PRISM_HEAT, "contrast": 1.5, "line_glow": 0.4,
+                  "recipe": Recipe(transform="tanh", gain=3.0, level="signed", colour="wheel",
+                                   lut=HEAT_LUT, hue_cycles=2.0, weight="abs")}),
+        # two colours by sign: out of the background, and a wave whose rest is 0.5
+        (OFFSET, {**HEAT_VIEW, "grid": HEAT_GRID - 0.5, "isolines": 5, "background": HEAT_BG,
+                  "recipe": Recipe(transform="tanh", gain=2.0, level="signed", colour="sign",
+                                   positive=(1.0, 0.5, 0.2), negative=(0.2, 0.5, 1.0),
+                                   mix=True)}),
+        (FULL, {**HEAT_VIEW, "grid": HEAT_GRID, "fade": 0.2, "ambient": 0.3,
+                "recipe": Recipe(colour="sign", positive=(1.0, 0.5, 0.2),
+                                 negative=(0.2, 0.5, 1.0), sign_at=0.5, weight="centre")}),
+        # a field made per pixel (the wave pictures), read where the tile is, and the hue
+        # of the height (the spectrogram)
+        (OFFSET, {**HEAT_VIEW, "image": HEAT_IMAGE, **PRISM_HEAT,
+                  "recipe": Recipe(transform="wave", gain=1.5, share=0.35, level="signed",
+                                   colour="wheel", lut=HEAT_LUT, hue_cycles=1.6,
+                                   hue_of="inverse", weight="abs")}),
+        (Tile(8, 4, 48, 40, 64, 48), {**HEAT_VIEW, "image": HEAT_IMAGE[3:45, 7:57],
+                                      "origin": (7, 3), **PRISM_HEAT,
+                                      "recipe": Recipe(transform="sqrt", colour="wheel",
+                                                       lut=HEAT_LUT, hue_cycles=1.0,
+                                                       hue_of="height", weight="value")}),
+    ],
 }  # fmt: skip
 ALL_CASES = [(n, t, p) for n, cases in CASES.items() for t, p in cases]
 needs_compiler = pytest.mark.skipif(cuda_emu.compiler() is None, reason="no C++ compiler")
@@ -194,6 +244,7 @@ def test_every_kernel_has_a_reference_and_a_signature():
         "fractal_glow",
         "fringe",
         "gauss",
+        "heat_shade",
         "palette",
         "resize",
         "splat",

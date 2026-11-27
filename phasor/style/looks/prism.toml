@@ -127,6 +127,10 @@ glow = "soft"
 glow = "strong"
 colormap = "spectrum"
 
+[defaults.star_lattice.style]   # echoes of a feedback-delay network flash out of the dark
+glow = "strong"
+colormap = "spectrum"
+
 [defaults.wavefront3d.style]
 glow = "strong"
 colormap = "spectrum"
@@ -195,6 +199,9 @@ dim = 0.9  # a little see-through, like the other prism types
 [defaults.pole_zero.style]
 glow = "strong"
 
+[defaults.phasor_field.style]  # the hands and their smears glow in the hue of their angle
+glow = "strong"
+
 [defaults.frequency_response.params]
 dim = 0.9  # a little see-through, like the other prism types
 
@@ -217,6 +224,13 @@ glow = "soft"
 hue_along = 1.0
 
 [defaults.winding.style]
+glow = "strong"
+
+# sampling and aliasing: the true wave and its alias in two hues, the samples as beacons
+[defaults.aliasing.params]
+dim = 0.9  # a little see-through, like the other prism types
+
+[defaults.aliasing.style]
 glow = "strong"
 
 [defaults.directivity.style]

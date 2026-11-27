@@ -283,6 +283,7 @@ def test_the_timeline_has_narration_blocks_and_a_waveform(tmp_path):
         "start": 0.5,
         "duration": 1.0,
         "audio": "a.wav",
+        "index": 0,  # its place among all blocks (pauses too), for dragging it
     }
     wf = e.waveform("a.wav", 50)
     assert (
